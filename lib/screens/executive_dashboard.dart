@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import 'volunteer_tasks_screen.dart';
 
-class VolunteerDashboard extends StatelessWidget {
-  const VolunteerDashboard({super.key});
+class ExecutiveDashboard extends StatelessWidget {
+  const ExecutiveDashboard({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final name = AuthService.fullName ?? 'Volunteer';
+    final name = AuthService.fullName ?? 'Executive';
 
     return Scaffold(
       backgroundColor: const Color(0xFF041329),
@@ -38,12 +37,14 @@ class VolunteerDashboard extends StatelessWidget {
                       ],
                     ),
                     child: const Icon(
-                      Icons.person,
+                      Icons.workspace_premium_rounded,
                       color: Colors.white,
                       size: 28,
                     ),
                   ),
+
                   const SizedBox(width: 14),
+
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -69,6 +70,7 @@ class VolunteerDashboard extends StatelessWidget {
                       ],
                     ),
                   ),
+
                   Container(
                     width: 45,
                     height: 45,
@@ -110,10 +112,10 @@ class VolunteerDashboard extends StatelessWidget {
                     ),
                   ],
                 ),
-                child: Column(
+                child: const Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
+                    Row(
                       children: [
                         Icon(
                           Icons.groups_rounded,
@@ -131,19 +133,23 @@ class VolunteerDashboard extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 18),
-                    const Text(
-                      'Volunteer Dashboard',
+
+                    SizedBox(height: 18),
+
+                    Text(
+                      'Executive Dashboard',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 25,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Make an impact. Complete your tasks. '
-                      'Grow with the branch.',
+
+                    SizedBox(height: 8),
+
+                    Text(
+                      'Manage volunteers, assign tasks, '
+                      'and coordinate branch activities.',
                       style: TextStyle(
                         color: Colors.white70,
                         fontSize: 14,
@@ -152,6 +158,98 @@ class VolunteerDashboard extends StatelessWidget {
                     ),
                   ],
                 ),
+              ),
+
+              const SizedBox(height: 28),
+
+              const Text(
+                'Management',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+
+              const SizedBox(height: 14),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: _managementCard(
+                      icon: Icons.assignment_add,
+                      title: 'Assign Task',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _managementCard(
+                      icon: Icons.event_available,
+                      title: 'Create Event',
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 12),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: _managementCard(
+                      icon: Icons.groups_outlined,
+                      title: 'Volunteers',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _managementCard(
+                      icon: Icons.campaign_outlined,
+                      title: 'Announcement',
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 28),
+
+              const Text(
+                'Branch Overview',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+
+              const SizedBox(height: 14),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: _overviewCard(
+                      icon: Icons.groups_rounded,
+                      value: '30',
+                      title: 'Volunteers',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _overviewCard(
+                      icon: Icons.task_alt_rounded,
+                      value: '18',
+                      title: 'Active Tasks',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _overviewCard(
+                      icon: Icons.event_rounded,
+                      value: '4',
+                      title: 'Events',
+                    ),
+                  ),
+                ],
               ),
 
               const SizedBox(height: 28),
@@ -171,122 +269,132 @@ class VolunteerDashboard extends StatelessWidget {
 
               const SizedBox(height: 28),
 
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'My Tasks',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              const VolunteerTasksScreen(),
-                        ),
-                      );
-                    },
-                    child: const Row(
-                      children: [
-                        Text(
-                          'View All',
-                          style: TextStyle(
-                            color: Color(0xFF4D91FF),
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        SizedBox(width: 5),
-                        Icon(
-                          Icons.arrow_forward_ios_rounded,
-                          color: Color(0xFF4D91FF),
-                          size: 13,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              const Text(
+                'Recent Task Activity',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
 
               const SizedBox(height: 14),
 
-              GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) =>
-                          const VolunteerTasksScreen(),
-                    ),
-                  );
-                },
-                child: _taskCard(
-                  title: 'Promotional Campaign',
-                  subtitle: 'Social Media Promotion',
-                  status: 'Pending',
-                  icon: Icons.campaign_outlined,
-                ),
+              _activityCard(
+                name: 'Volunteer A',
+                task: 'Completed Promotional Campaign',
+                status: 'Completed',
               ),
 
               const SizedBox(height: 12),
 
-              GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) =>
-                          const VolunteerTasksScreen(),
-                    ),
-                  );
-                },
-                child: _taskCard(
-                  title: 'Event Registration Desk',
-                  subtitle: 'SPAVe 8.0',
-                  status: 'In Process',
-                  icon: Icons.assignment_outlined,
-                ),
+              _activityCard(
+                name: 'Volunteer B',
+                task: 'Started Event Registration Desk',
+                status: 'In Process',
               ),
 
-              const SizedBox(height: 28),
+              const SizedBox(height: 12),
 
-              Row(
-                children: [
-                  Expanded(
-                    child: _quickCard(
-                      icon: Icons.task_alt_rounded,
-                      title: 'Tasks',
-                      value: '2',
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _quickCard(
-                      icon: Icons.stars_rounded,
-                      title: 'Points',
-                      value: '120',
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _quickCard(
-                      icon: Icons.emoji_events_rounded,
-                      title: 'Rank',
-                      value: '#8',
-                    ),
-                  ),
-                ],
+              _activityCard(
+                name: 'Volunteer C',
+                task: 'New task assigned',
+                status: 'Pending',
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _managementCard({
+    required IconData icon,
+    required String title,
+  }) {
+    return Container(
+      height: 125,
+      padding: const EdgeInsets.all(17),
+      decoration: BoxDecoration(
+        color: const Color(0xFF091F40),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: const Color(0xFF173D72),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: const Color(0xFF0D5BD7).withOpacity(0.16),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(
+              icon,
+              color: const Color(0xFF4D91FF),
+              size: 25,
+            ),
+          ),
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _overviewCard({
+    required IconData icon,
+    required String value,
+    required String title,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        vertical: 18,
+        horizontal: 8,
+      ),
+      decoration: BoxDecoration(
+        color: const Color(0xFF091F40),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: const Color(0xFF173D72),
+        ),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            icon,
+            color: const Color(0xFF4D91FF),
+            size: 24,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 19,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white54,
+              fontSize: 10,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -317,7 +425,9 @@ class VolunteerDashboard extends StatelessWidget {
               size: 30,
             ),
           ),
+
           const SizedBox(width: 15),
+
           const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -359,6 +469,7 @@ class VolunteerDashboard extends StatelessWidget {
               ],
             ),
           ),
+
           const Icon(
             Icons.arrow_forward_ios_rounded,
             color: Colors.white38,
@@ -369,17 +480,16 @@ class VolunteerDashboard extends StatelessWidget {
     );
   }
 
-  Widget _taskCard({
-    required String title,
-    required String subtitle,
+  Widget _activityCard({
+    required String name,
+    required String task,
     required String status,
-    required IconData icon,
   }) {
     return Container(
-      padding: const EdgeInsets.all(17),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFF091F40),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: const Color(0xFF173D72),
         ),
@@ -387,34 +497,36 @@ class VolunteerDashboard extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 50,
-            height: 50,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
-              color: const Color(0xFF0D5BD7).withOpacity(0.15),
-              borderRadius: BorderRadius.circular(14),
+              shape: BoxShape.circle,
+              color: const Color(0xFF0D5BD7).withOpacity(0.16),
             ),
-            child: Icon(
-              icon,
-              color: const Color(0xFF4D91FF),
-              size: 25,
+            child: const Icon(
+              Icons.person_outline,
+              color: Color(0xFF4D91FF),
+              size: 23,
             ),
           ),
-          const SizedBox(width: 13),
+
+          const SizedBox(width: 12),
+
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  title,
+                  name,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 15,
+                    fontSize: 14,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 5),
+                const SizedBox(height: 4),
                 Text(
-                  subtitle,
+                  task,
                   style: const TextStyle(
                     color: Colors.white54,
                     fontSize: 12,
@@ -423,68 +535,23 @@ class VolunteerDashboard extends StatelessWidget {
               ],
             ),
           ),
+
           Container(
             padding: const EdgeInsets.symmetric(
-              horizontal: 10,
-              vertical: 7,
+              horizontal: 9,
+              vertical: 6,
             ),
             decoration: BoxDecoration(
               color: const Color(0xFF0D5BD7).withOpacity(0.18),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(9),
             ),
             child: Text(
               status,
               style: const TextStyle(
                 color: Color(0xFF5EA0FF),
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: FontWeight.bold,
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _quickCard({
-    required IconData icon,
-    required String title,
-    required String value,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        vertical: 18,
-        horizontal: 10,
-      ),
-      decoration: BoxDecoration(
-        color: const Color(0xFF091F40),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: const Color(0xFF173D72),
-        ),
-      ),
-      child: Column(
-        children: [
-          Icon(
-            icon,
-            color: const Color(0xFF4D91FF),
-            size: 25,
-          ),
-          const SizedBox(height: 9),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            title,
-            style: const TextStyle(
-              color: Colors.white54,
-              fontSize: 11,
             ),
           ),
         ],

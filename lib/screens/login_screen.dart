@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import 'registration_screen.dart';
 import 'volunteer_dashboard.dart';
+import 'executive_dashboard.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -32,17 +33,27 @@ class _LoginScreenState extends State<LoginScreen> {
       enteredPassword: password,
     );
 
-    if (success) {
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Invalid ID or password.'),
+        ),
+      );
+      return;
+    }
+
+    if (AuthService.role == 'Executive') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const ExecutiveDashboard(),
+        ),
+      );
+    } else {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
           builder: (context) => const VolunteerDashboard(),
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Invalid ID or password.'),
         ),
       );
     }
