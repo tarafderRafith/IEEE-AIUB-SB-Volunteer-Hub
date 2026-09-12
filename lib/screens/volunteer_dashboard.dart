@@ -1,13 +1,99 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import 'login_screen.dart';
 import 'volunteer_tasks_screen.dart';
+import 'event_details_screen.dart';
 
 class VolunteerDashboard extends StatelessWidget {
   const VolunteerDashboard({super.key});
 
+  void _openSpaveDetails(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const EventDetailsScreen(
+          title: 'SPAVe 8.0',
+          subtitle: 'Academic Research: Ways to Leverage Overall Impact',
+          date: '6 Aug 2026',
+          time: '2:00 PM',
+          location: 'Multipurpose Hall, Annex-7',
+        ),
+      ),
+    );
+  }
+
+  void _openTasks(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const VolunteerTasksScreen(),
+      ),
+    );
+  }
+
+  void _logout(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF091F40),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
+          ),
+          title: const Text(
+            'Logout',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: const Text(
+            'Are you sure you want to logout?',
+            style: TextStyle(
+              color: Colors.white60,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text(
+                'CANCEL',
+                style: TextStyle(
+                  color: Colors.white54,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                AuthService.clear();
+
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const LoginScreen(),
+                  ),
+                  (route) => false,
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0D5BD7),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text('LOGOUT'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final name = AuthService.fullName ?? 'Volunteer';
+    final team = AuthService.team ?? 'Team not assigned';
 
     return Scaffold(
       backgroundColor: const Color(0xFF041329),
@@ -66,22 +152,48 @@ class VolunteerDashboard extends StatelessWidget {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.groups_rounded,
+                              color: Color(0xFF4D91FF),
+                              size: 13,
+                            ),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                team,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Color(0xFF5EA0FF),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
-                  Container(
-                    width: 45,
-                    height: 45,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0A2145),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: const Color(0xFF173D72),
+                  GestureDetector(
+                    onTap: () => _logout(context),
+                    child: Container(
+                      width: 45,
+                      height: 45,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0A2145),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: const Color(0xFF173D72),
+                        ),
                       ),
-                    ),
-                    child: const Icon(
-                      Icons.notifications_none_rounded,
-                      color: Color(0xFF4D91FF),
+                      child: const Icon(
+                        Icons.logout_rounded,
+                        color: Color(0xFF4D91FF),
+                      ),
                     ),
                   ),
                 ],
@@ -110,10 +222,10 @@ class VolunteerDashboard extends StatelessWidget {
                     ),
                   ],
                 ),
-                child: Column(
+                child: const Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
+                    Row(
                       children: [
                         Icon(
                           Icons.groups_rounded,
@@ -131,8 +243,8 @@ class VolunteerDashboard extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 18),
-                    const Text(
+                    SizedBox(height: 18),
+                    Text(
                       'Volunteer Dashboard',
                       style: TextStyle(
                         color: Colors.white,
@@ -140,8 +252,8 @@ class VolunteerDashboard extends StatelessWidget {
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    const Text(
+                    SizedBox(height: 8),
+                    Text(
                       'Make an impact. Complete your tasks. '
                       'Grow with the branch.',
                       style: TextStyle(
@@ -167,7 +279,11 @@ class VolunteerDashboard extends StatelessWidget {
 
               const SizedBox(height: 14),
 
-              _eventCard(),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _openSpaveDetails(context),
+                child: _eventCard(),
+              ),
 
               const SizedBox(height: 28),
 
@@ -184,15 +300,8 @@ class VolunteerDashboard extends StatelessWidget {
                     ),
                   ),
                   GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              const VolunteerTasksScreen(),
-                        ),
-                      );
-                    },
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _openTasks(context),
                     child: const Row(
                       children: [
                         Text(
@@ -218,15 +327,8 @@ class VolunteerDashboard extends StatelessWidget {
               const SizedBox(height: 14),
 
               GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) =>
-                          const VolunteerTasksScreen(),
-                    ),
-                  );
-                },
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _openTasks(context),
                 child: _taskCard(
                   title: 'Promotional Campaign',
                   subtitle: 'Social Media Promotion',
@@ -238,15 +340,8 @@ class VolunteerDashboard extends StatelessWidget {
               const SizedBox(height: 12),
 
               GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) =>
-                          const VolunteerTasksScreen(),
-                    ),
-                  );
-                },
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _openTasks(context),
                 child: _taskCard(
                   title: 'Event Registration Desk',
                   subtitle: 'SPAVe 8.0',
@@ -301,6 +396,12 @@ class VolunteerDashboard extends StatelessWidget {
         border: Border.all(
           color: const Color(0xFF173D72),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0D5BD7).withOpacity(0.12),
+            blurRadius: 20,
+          ),
+        ],
       ),
       child: Row(
         children: [

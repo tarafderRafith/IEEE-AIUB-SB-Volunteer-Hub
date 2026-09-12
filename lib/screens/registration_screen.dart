@@ -11,6 +11,8 @@ class RegistrationScreen extends StatefulWidget {
 
 class _RegistrationScreenState extends State<RegistrationScreen> {
   String? selectedRole;
+  String? selectedTeam;
+  bool isCreatingAccount = false;
 
   final fullNameController = TextEditingController();
   final memberIdController = TextEditingController();
@@ -21,14 +23,45 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final confirmPasswordController = TextEditingController();
   final executivePositionController = TextEditingController();
 
+  final List<String> teams = [
+    'Event Management',
+    'Public Relations',
+    'Logistics',
+    'Creative',
+    'Web',
+    'WIE',
+    'Publications',
+  ];
+
   void selectRole(String role) {
     setState(() {
       selectedRole = role;
+      selectedTeam = null;
     });
   }
 
-  void createAccount() {
+  void selectTeam(String team) {
+    setState(() {
+      selectedTeam = team;
+    });
+  }
+
+  Future<void> createAccount() async {
     if (selectedRole == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please choose your role.'),
+        ),
+      );
+      return;
+    }
+
+    if (selectedTeam == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please choose your team.'),
+        ),
+      );
       return;
     }
 
@@ -66,7 +99,11 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       return;
     }
 
-    AuthService.register(
+    setState(() {
+      isCreatingAccount = true;
+    });
+
+    final success = await AuthService.register(
       fullNameValue: fullNameController.text.trim(),
       memberIdValue: memberIdController.text.trim(),
       emailValue: emailController.text.trim(),
@@ -74,10 +111,28 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       departmentValue: departmentController.text.trim(),
       passwordValue: passwordController.text,
       roleValue: selectedRole!,
+      teamValue: selectedTeam!,
       executivePositionValue: selectedRole == 'Executive'
           ? executivePositionController.text.trim()
           : null,
     );
+
+    if (!mounted) return;
+
+    setState(() {
+      isCreatingAccount = false;
+    });
+
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'This Member / Volunteer ID is already registered.',
+          ),
+        ),
+      );
+      return;
+    }
 
     Navigator.pushReplacement(
       context,
@@ -143,13 +198,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
               const SizedBox(height: 35),
 
-              const Text(
-                'Choose your role',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+              _sectionTitle(
+                number: '01',
+                title: 'Choose your role',
               ),
 
               const SizedBox(height: 16),
@@ -175,13 +226,82 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               ),
 
               if (selectedRole != null) ...[
-                const SizedBox(height: 35),
+                const SizedBox(height: 32),
+
+                _sectionTitle(
+                  number: '02',
+                  title: 'Choose your team',
+                ),
+
+                const SizedBox(height: 8),
+
+                const Text(
+                  'Every volunteer and executive must belong to a team.',
+                  style: TextStyle(
+                    color: Colors.white54,
+                    fontSize: 13,
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                _teamGrid(),
+
+                const SizedBox(height: 32),
+
+                _sectionTitle(
+                  number: '03',
+                  title: '$selectedRole information',
+                ),
+
+                const SizedBox(height: 20),
+
                 _registrationForm(),
               ],
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _sectionTitle({
+    required String number,
+    required String title,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: const Color(0xFF0D5BD7).withOpacity(0.18),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: const Color(0xFF24599A),
+            ),
+          ),
+          child: Center(
+            child: Text(
+              number,
+              style: const TextStyle(
+                color: Color(0xFF5EA0FF),
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 11),
+        Text(
+          title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 19,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
     );
   }
 
@@ -271,23 +391,112 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     );
   }
 
+  Widget _teamGrid() {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: teams.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 2.15,
+      ),
+      itemBuilder: (context, index) {
+        final team = teams[index];
+        final selected = selectedTeam == team;
+
+        final icons = [
+          Icons.event_available_rounded,
+          Icons.campaign_rounded,
+          Icons.local_shipping_outlined,
+          Icons.palette_outlined,
+          Icons.language_rounded,
+          Icons.woman_rounded,
+          Icons.menu_book_rounded,
+        ];
+
+        return GestureDetector(
+          onTap: () => selectTeam(team),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 13,
+              vertical: 10,
+            ),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: selected
+                  ? const LinearGradient(
+                      colors: [
+                        Color(0xFF0D5BD7),
+                        Color(0xFF082E70),
+                      ],
+                    )
+                  : const LinearGradient(
+                      colors: [
+                        Color(0xFF0A2145),
+                        Color(0xFF071A36),
+                      ],
+                    ),
+              border: Border.all(
+                color: selected
+                    ? const Color(0xFF4D91FF)
+                    : const Color(0xFF173D72),
+                width: selected ? 1.5 : 1,
+              ),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: const Color(0xFF0D5BD7).withOpacity(0.25),
+                        blurRadius: 15,
+                      ),
+                    ]
+                  : [],
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  icons[index],
+                  color: selected
+                      ? Colors.white
+                      : const Color(0xFF4D91FF),
+                  size: 22,
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    team,
+                    style: TextStyle(
+                      color: selected
+                          ? Colors.white
+                          : Colors.white70,
+                      fontSize: 12,
+                      fontWeight:
+                          selected ? FontWeight.bold : FontWeight.w500,
+                    ),
+                  ),
+                ),
+                if (selected)
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    color: Colors.white,
+                    size: 17,
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _registrationForm() {
     final bool isExecutive = selectedRole == 'Executive';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '$selectedRole Registration',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 23,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-
-        const SizedBox(height: 20),
-
         _input(
           controller: fullNameController,
           label: 'Full Name',
@@ -328,6 +537,16 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           icon: Icons.school_outlined,
         ),
 
+        if (isExecutive) ...[
+          const SizedBox(height: 15),
+
+          _input(
+            controller: executivePositionController,
+            label: 'Executive Position',
+            icon: Icons.workspace_premium_outlined,
+          ),
+        ],
+
         const SizedBox(height: 15),
 
         _input(
@@ -346,25 +565,16 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           obscureText: true,
         ),
 
-        if (isExecutive) ...[
-          const SizedBox(height: 15),
-
-          _input(
-            controller: executivePositionController,
-            label: 'Executive Position',
-            icon: Icons.workspace_premium_outlined,
-          ),
-        ],
-
         const SizedBox(height: 28),
 
         SizedBox(
           width: double.infinity,
           height: 58,
           child: ElevatedButton(
-            onPressed: createAccount,
+            onPressed: isCreatingAccount ? null : createAccount,
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF0D5BD7),
+              disabledBackgroundColor: const Color(0xFF16447F),
               foregroundColor: Colors.white,
               elevation: 8,
               shadowColor: const Color(0xFF0D5BD7).withOpacity(0.4),
@@ -372,21 +582,30 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                 borderRadius: BorderRadius.circular(17),
               ),
             ),
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  'CREATE ACCOUNT',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1,
+            child: isCreatingAccount
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'CREATE ACCOUNT',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                      SizedBox(width: 10),
+                      Icon(Icons.arrow_forward_rounded),
+                    ],
                   ),
-                ),
-                SizedBox(width: 10),
-                Icon(Icons.arrow_forward_rounded),
-              ],
-            ),
           ),
         ),
       ],
