@@ -1,426 +1,414 @@
 import 'package:flutter/material.dart';
+
+import '../services/database_service.dart';
 import 'event_details_screen.dart';
 
-class VolunteerEventsScreen extends StatelessWidget {
-  const VolunteerEventsScreen({super.key});
+class VolunteerEventsScreen
+    extends StatefulWidget {
+  const VolunteerEventsScreen({
+    super.key,
+  });
 
-  void openSpave(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const EventDetailsScreen(
-          title: 'SPAVe 8.0',
-          subtitle:
-              'Academic Research: Ways to Leverage Overall Impact',
-          date: '6 Aug 2026',
-          time: '2:00 PM',
-          location: 'Multipurpose Hall, Annex-7',
-        ),
-      ),
-    );
+  @override
+  State<VolunteerEventsScreen>
+      createState() =>
+          _VolunteerEventsScreenState();
+}
+
+class _VolunteerEventsScreenState
+    extends State<VolunteerEventsScreen> {
+  List<Map<String, dynamic>> _events = [];
+
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _loadEvents();
+  }
+
+  Future<void> _loadEvents() async {
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+      });
+    }
+
+    try {
+      final events =
+          await DatabaseService.getAllEvents();
+
+      if (!mounted) return;
+
+      setState(() {
+        _events = events;
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint(
+        'Event loading error: $e',
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  String _formatDate(String value) {
+    final date = DateTime.tryParse(value);
+
+    if (date == null) {
+      return value;
+    }
+
+    final day =
+        date.day.toString().padLeft(2, '0');
+
+    final month =
+        date.month.toString().padLeft(2, '0');
+
+    return '$day/$month/${date.year}';
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF041329),
+      backgroundColor:
+          const Color(0xFF041329),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF041329),
+        backgroundColor:
+            const Color(0xFF041329),
         elevation: 0,
+        leading: IconButton(
+          onPressed: () {
+            Navigator.pop(context);
+          },
+          icon: const Icon(
+            Icons.arrow_back_rounded,
+            color: Colors.white,
+          ),
+        ),
         title: const Text(
           'Events',
           style: TextStyle(
             color: Colors.white,
-            fontSize: 24,
+            fontSize: 18,
             fontWeight: FontWeight.w800,
           ),
         ),
-        iconTheme: const IconThemeData(
-          color: Colors.white,
-        ),
+        actions: [
+          IconButton(
+            onPressed: _loadEvents,
+            icon: const Icon(
+              Icons.refresh_rounded,
+              color: Color(0xFF6EA6FF),
+            ),
+          ),
+        ],
       ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 30),
-          children: [
-            GestureDetector(
-              onTap: () => openSpave(context),
-              child: _featuredEvent(),
-            ),
-
-            const SizedBox(height: 28),
-
-            const Text(
-              'Upcoming Events',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-
-            const SizedBox(height: 15),
-
-            GestureDetector(
-              onTap: () => openSpave(context),
-              child: _eventCard(
-                title: 'SPAVe 8.0',
-                subtitle:
-                    'Academic Research: Ways to Leverage Overall Impact',
-                date: '6 Aug 2026',
-                time: '2:00 PM',
-                location: 'Multipurpose Hall, Annex-7',
-                icon: Icons.science_rounded,
-                accent: const Color(0xFF4D91FF),
-              ),
-            ),
-
-            const SizedBox(height: 15),
-
-            _eventCard(
-              title: 'IEEE AIUB Volunteer Meet',
-              subtitle:
-                  'Volunteer coordination and team briefing',
-              date: '12 Aug 2026',
-              time: '4:00 PM',
-              location: 'AIUB Campus',
-              icon: Icons.groups_rounded,
-              accent: const Color(0xFF7C8CFF),
-            ),
-
-            const SizedBox(height: 15),
-
-            _eventCard(
-              title: 'Tech Workshop',
-              subtitle:
-                  'Technology and career development session',
-              date: '20 Aug 2026',
-              time: '3:00 PM',
-              location: 'AIUB Auditorium',
-              icon: Icons.computer_rounded,
-              accent: const Color(0xFF36D399),
-            ),
-          ],
-        ),
+      body: RefreshIndicator(
+        color: const Color(0xFF3D8BFF),
+        backgroundColor:
+            const Color(0xFF0A2348),
+        onRefresh: _loadEvents,
+        child: _buildBody(),
       ),
     );
   }
 
-  Widget _featuredEvent() {
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(27),
-        gradient: const LinearGradient(
-          colors: [
-            Color(0xFF0D5BD7),
-            Color(0xFF082E70),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(
+          color: Color(0xFF3D8BFF),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF0D5BD7).withOpacity(0.30),
-            blurRadius: 25,
-            spreadRadius: 1,
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      );
+    }
+
+    if (_events.isEmpty) {
+      return ListView(
+        physics:
+            const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(20),
         children: [
-          Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.13),
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: const Icon(
-                  Icons.event_available_rounded,
-                  color: Colors.white,
-                  size: 27,
-                ),
-              ),
-              const SizedBox(width: 13),
-              const Expanded(
-                child: Text(
-                  'UPCOMING EVENT',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.13),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Text(
-                  'FEATURED',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.8,
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 23),
-
-          const Text(
-            'SPAVe 8.0',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 28,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-
-          const SizedBox(height: 7),
-
-          const Text(
-            'Academic Research: Ways to Leverage Overall Impact',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 14,
-              height: 1.45,
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          Row(
-            children: [
-              _infoChip(
-                Icons.calendar_today_rounded,
-                '6 Aug 2026',
-              ),
-              const SizedBox(width: 8),
-              _infoChip(
-                Icons.access_time_rounded,
-                '2:00 PM',
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 10),
-
-          Row(
-            children: [
-              _infoChip(
-                Icons.location_on_rounded,
-                'Multipurpose Hall',
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 18),
-
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Text(
-                'VIEW DETAILS',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.8,
-                ),
-              ),
-              SizedBox(width: 6),
-              Icon(
-                Icons.arrow_forward_rounded,
-                color: Colors.white,
-                size: 16,
-              ),
-            ],
-          ),
+          const SizedBox(height: 130),
+          _emptyState(),
         ],
+      );
+    }
+
+    return ListView.builder(
+      physics:
+          const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(
+        20,
+        12,
+        20,
+        35,
       ),
+      itemCount: _events.length,
+      itemBuilder: (context, index) {
+        final event = _events[index];
+
+        return Padding(
+          padding:
+              const EdgeInsets.only(bottom: 12),
+          child: _eventCard(event),
+        );
+      },
     );
   }
 
-  Widget _infoChip(IconData icon, String text) {
-    return Flexible(
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 10,
-          vertical: 8,
-        ),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.10),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              color: Colors.white70,
-              size: 14,
-            ),
-            const SizedBox(width: 6),
-            Flexible(
-              child: Text(
-                text,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 11,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _eventCard({
-    required String title,
-    required String subtitle,
-    required String date,
-    required String time,
-    required String location,
-    required IconData icon,
-    required Color accent,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFF091F40),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: const Color(0xFF173D72),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: accent.withOpacity(0.13),
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: Icon(
-                  icon,
-                  color: accent,
-                  size: 27,
-                ),
-              ),
-              const SizedBox(width: 13),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white54,
-                        fontSize: 12,
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 17),
-
-          const Divider(
-            color: Color(0xFF173D72),
-            height: 1,
-          ),
-
-          const SizedBox(height: 15),
-
-          Row(
-            children: [
-              Expanded(
-                child: _detail(
-                  Icons.calendar_today_rounded,
-                  date,
-                  accent,
-                ),
-              ),
-              Expanded(
-                child: _detail(
-                  Icons.access_time_rounded,
-                  time,
-                  accent,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 12),
-
-          _detail(
-            Icons.location_on_rounded,
-            location,
-            accent,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _detail(
-    IconData icon,
-    String text,
-    Color accent,
+  Widget _eventCard(
+    Map<String, dynamic> event,
   ) {
+    final title =
+        event['title']?.toString() ??
+            'Untitled Event';
+
+    final description =
+        event['description']?.toString() ??
+            '';
+
+    final date =
+        event['date']?.toString() ??
+            '';
+
+    final time =
+        event['time']?.toString() ??
+            '';
+
+    final location =
+        event['location']?.toString() ??
+            '';
+
+    final eventType =
+        event['event_type']?.toString() ??
+            'Other';
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () async {
+          final result =
+              await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  EventDetailsScreen(
+                event: event,
+                canDelete: false,
+              ),
+            ),
+          );
+
+          if (result == true) {
+            await _loadEvents();
+          }
+        },
+        borderRadius:
+            BorderRadius.circular(20),
+        child: Ink(
+          padding: const EdgeInsets.all(17),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0A2348),
+            borderRadius:
+                BorderRadius.circular(20),
+            border: Border.all(
+              color: Colors.white10,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      gradient:
+                          const LinearGradient(
+                        colors: [
+                          Color(0xFF0D5BD7),
+                          Color(0xFF123C82),
+                        ],
+                      ),
+                      borderRadius:
+                          BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.event_available_rounded,
+                      color: Colors.white,
+                      size: 23,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment:
+                          CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 2,
+                          overflow:
+                              TextOverflow.ellipsis,
+                          style:
+                              const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight:
+                                FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          eventType,
+                          style:
+                              const TextStyle(
+                            color:
+                                Color(0xFF6EA6FF),
+                            fontSize: 10,
+                            fontWeight:
+                                FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    color: Colors.white30,
+                    size: 15,
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 14),
+
+              if (description.isNotEmpty)
+                Text(
+                  description,
+                  maxLines: 2,
+                  overflow:
+                      TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 11,
+                    height: 1.4,
+                  ),
+                ),
+
+              const SizedBox(height: 14),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: _smallInfo(
+                      icon:
+                          Icons.calendar_month_outlined,
+                      value:
+                          _formatDate(date),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _smallInfo(
+                      icon:
+                          Icons.access_time_rounded,
+                      value: time,
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 9),
+
+              _smallInfo(
+                icon:
+                    Icons.location_on_outlined,
+                value: location,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _smallInfo({
+    required IconData icon,
+    required String value,
+  }) {
     return Row(
       children: [
         Icon(
           icon,
-          color: accent,
+          color: const Color(0xFF4D91FF),
           size: 15,
         ),
-        const SizedBox(width: 7),
+        const SizedBox(width: 6),
         Expanded(
           child: Text(
-            text,
-            overflow: TextOverflow.ellipsis,
+            value,
+            maxLines: 1,
+            overflow:
+                TextOverflow.ellipsis,
             style: const TextStyle(
-              color: Colors.white60,
-              fontSize: 11,
+              color: Colors.white54,
+              fontSize: 10,
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _emptyState() {
+    return Container(
+      padding: const EdgeInsets.all(25),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A2348),
+        borderRadius:
+            BorderRadius.circular(22),
+        border: Border.all(
+          color: Colors.white10,
+        ),
+      ),
+      child: const Column(
+        children: [
+          Icon(
+            Icons.event_busy_rounded,
+            color: Color(0xFF4D91FF),
+            size: 48,
+          ),
+          SizedBox(height: 15),
+          Text(
+            'No Upcoming Events',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          SizedBox(height: 6),
+          Text(
+            'Events created by the executive team will appear here.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white54,
+              fontSize: 11,
+              height: 1.5,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
