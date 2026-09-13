@@ -1,30 +1,38 @@
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
 class DatabaseService {
-static Database? _database;
+  static Database? _database;
 
-static Future<Database> get database async {
-if (_database != null) {
-return _database!;
-}
+  static const String _databaseName = 'ieee_volunteer_hub.db';
+  static const int _databaseVersion = 3;
 
+  static Future<Database> get database async {
+    if (_database != null) {
+      return _database!;
+    }
 
-_database = await _initializeDatabase();
-return _database!;
+    _database = await _initDatabase();
+    return _database!;
+  }
 
+  static Future<Database> _initDatabase() async {
+    final databasePath = await getDatabasesPath();
+    final path = join(databasePath, _databaseName);
 
-}
+    return await openDatabase(
+      path,
+      version: _databaseVersion,
+      onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
+    );
+  }
 
-static Future<Database> _initializeDatabase() async {
-final databasePath = await getDatabasesPath();
-final path = join(databasePath, 'ieee_volunteer_hub.db');
-
-
-return await openDatabase(
-  path,
-  version: 2,
-  onCreate: (db, version) async {
+  static Future<void> _onCreate(
+    Database db,
+    int version,
+  ) async {
     await db.execute('''
       CREATE TABLE users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,195 +47,246 @@ return await openDatabase(
         executive_position TEXT
       )
     ''');
-  },
-  onUpgrade: (db, oldVersion, newVersion) async {
+
+    await db.execute('''
+      CREATE TABLE tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        assigned_to_member_id TEXT NOT NULL,
+        assigned_by_member_id TEXT NOT NULL,
+        team TEXT NOT NULL,
+        priority TEXT NOT NULL,
+        deadline TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'Pending',
+        points INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      )
+    ''');
+  }
+
+  static Future<void> _onUpgrade(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
     if (oldVersion < 2) {
-      await db.execute(
-        "ALTER TABLE users ADD COLUMN team TEXT NOT NULL DEFAULT 'Public Relations'",
-      );
+      await db.execute('''
+        ALTER TABLE users
+        ADD COLUMN team TEXT NOT NULL DEFAULT 'Public Relations'
+      ''');
     }
-  },
-);
 
+    if (oldVersion < 3) {
+      await db.execute('''
+        CREATE TABLE tasks (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          description TEXT NOT NULL,
+          assigned_to_member_id TEXT NOT NULL,
+          assigned_by_member_id TEXT NOT NULL,
+          team TEXT NOT NULL,
+          priority TEXT NOT NULL,
+          deadline TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'Pending',
+          points INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL
+        )
+      ''');
+    }
+  }
 
-}
+  // ============================================================
+  // USER METHODS
+  // ============================================================
 
-static Future<bool> registerUser({
-required String fullName,
-required String memberId,
-required String email,
-required String phone,
-required String department,
-required String password,
-required String role,
-required String team,
-String? executivePosition,
-}) async {
-final db = await database;
+  static Future<bool> registerUser({
+    required String fullName,
+    required String memberId,
+    required String email,
+    required String phone,
+    required String department,
+    required String password,
+    required String role,
+    required String team,
+    String? executivePosition,
+  }) async {
+    try {
+      final db = await database;
 
+      await db.insert(
+        'users',
+        {
+          'full_name': fullName,
+          'member_id': memberId,
+          'email': email,
+          'phone': phone,
+          'department': department,
+          'password': password,
+          'role': role,
+          'team': team,
+          'executive_position': executivePosition,
+        },
+        conflictAlgorithm: ConflictAlgorithm.abort,
+      );
 
-try {
-  await db.insert(
-    'users',
-    {
-      'full_name': fullName,
-      'member_id': memberId,
-      'email': email,
-      'phone': phone,
-      'department': department,
-      'password': password,
-      'role': role,
-      'team': team,
-      'executive_position': executivePosition,
-    },
-    conflictAlgorithm: ConflictAlgorithm.abort,
-  );
+      return true;
+    } catch (e) {
+      debugPrint('Registration error: $e');
+      return false;
+    }
+  }
 
-  return true;
-} catch (_) {
-  return false;
-}
+  static Future<bool> memberIdExists(String memberId) async {
+    final db = await database;
 
+    final result = await db.query(
+      'users',
+      columns: ['id'],
+      where: 'member_id = ?',
+      whereArgs: [memberId],
+      limit: 1,
+    );
 
-}
+    return result.isNotEmpty;
+  }
 
-static Future<Map<String, dynamic>?> loginUser({
-required String memberId,
-required String password,
-}) async {
-final db = await database;
+  static Future<Map<String, dynamic>?> loginUser({
+    required String memberId,
+    required String password,
+  }) async {
+    final db = await database;
 
+    final result = await db.query(
+      'users',
+      where: 'member_id = ? AND password = ?',
+      whereArgs: [memberId, password],
+      limit: 1,
+    );
 
-final result = await db.query(
-  'users',
-  where: 'member_id = ? AND password = ?',
-  whereArgs: [memberId, password],
-  limit: 1,
-);
+    if (result.isEmpty) {
+      return null;
+    }
 
-if (result.isEmpty) {
-  debugPrintUsers(
-    message: 'LOGIN FAILED - No matching user found',
-    memberId: memberId,
-  );
+    return result.first;
+  }
 
-  return null;
-}
+  static Future<Map<String, dynamic>?> getUserByMemberId(
+    String memberId,
+  ) async {
+    final db = await database;
 
-final user = result.first;
+    final result = await db.query(
+      'users',
+      where: 'member_id = ?',
+      whereArgs: [memberId],
+      limit: 1,
+    );
 
-debugPrintUsers(
-  message: 'LOGIN SUCCESS - Database returned this user',
-  memberId: memberId,
-  specificUser: user,
-);
+    if (result.isEmpty) {
+      return null;
+    }
 
-return user;
+    return result.first;
+  }
 
+  // ============================================================
+  // VOLUNTEER METHODS
+  // ============================================================
 
-}
+  static Future<List<Map<String, dynamic>>> getVolunteers() async {
+    final db = await database;
 
-static Future<bool> memberIdExists(String memberId) async {
-final db = await database;
-
-
-final result = await db.query(
-  'users',
-  columns: ['id'],
-  where: 'member_id = ?',
-  whereArgs: [memberId],
-  limit: 1,
-);
-
-return result.isNotEmpty;
-
-
-}
-
-// ------------------------------------------------------------
-// SAFE DEBUG METHOD
-// ------------------------------------------------------------
-//
-// This method ONLY READS the users table.
-//
-// It does NOT:
-// - create users
-// - edit users
-// - delete users
-// - change passwords
-// - change names
-//
-// It prints the currently stored accounts to the Flutter console.
-//
-static Future<void> debugPrintUsers({
-String message = 'DATABASE DEBUG',
-String? memberId,
-Map<String, dynamic>? specificUser,
-}) async {
-final db = await database;
-
-
-print('');
-print('==================================================');
-print('IEEE VOLUNTEER HUB - DATABASE DEBUG');
-print('==================================================');
-print(message);
-print('--------------------------------------------------');
-
-if (specificUser != null) {
-  print('LOGIN RESULT:');
-  print('Database ID       : ${specificUser['id']}');
-  print('Full Name         : ${specificUser['full_name']}');
-  print('Member ID         : ${specificUser['member_id']}');
-  print('Email             : ${specificUser['email']}');
-  print('Phone             : ${specificUser['phone']}');
-  print('Department        : ${specificUser['department']}');
-  print('Role              : ${specificUser['role']}');
-  print('Team              : ${specificUser['team']}');
-  print('Executive Position: ${specificUser['executive_position']}');
-  print('--------------------------------------------------');
-}
-
-final List<Map<String, dynamic>> users = await db.query(
-  'users',
-  orderBy: 'id ASC',
-);
-
-print('TOTAL USERS IN LOCAL DATABASE: ${users.length}');
-print('');
-
-if (users.isEmpty) {
-  print('NO USERS FOUND IN DATABASE.');
-} else {
-  for (final user in users) {
-    print(
-      'ID: ${user['id']} | '
-      'Member ID: ${user['member_id']} | '
-      'Name: ${user['full_name']} | '
-      'Role: ${user['role']} | '
-      'Team: ${user['team']}',
+    return await db.query(
+      'users',
+      where: 'role = ?',
+      whereArgs: ['Volunteer'],
+      orderBy: 'full_name ASC',
     );
   }
-}
 
-if (memberId != null) {
-  print('');
-  print('SEARCHED MEMBER ID: $memberId');
+  // ============================================================
+  // TASK METHODS
+  // ============================================================
 
-  final matchingUsers = users.where(
-    (user) => user['member_id'] == memberId,
-  );
+  static Future<int> createTask({
+    required String title,
+    required String description,
+    required String assignedToMemberId,
+    required String assignedByMemberId,
+    required String team,
+    required String priority,
+    required String deadline,
+    required int points,
+  }) async {
+    final db = await database;
 
-  if (matchingUsers.isEmpty) {
-    print('RESULT: Member ID was NOT found in the database.');
-  } else {
-    print('RESULT: Member ID exists in the database.');
+    return await db.insert(
+      'tasks',
+      {
+        'title': title,
+        'description': description,
+        'assigned_to_member_id': assignedToMemberId,
+        'assigned_by_member_id': assignedByMemberId,
+        'team': team,
+        'priority': priority,
+        'deadline': deadline,
+        'status': 'Pending',
+        'points': points,
+        'created_at': DateTime.now().toIso8601String(),
+      },
+    );
   }
-}
 
-print('==================================================');
-print('');
+  static Future<List<Map<String, dynamic>>> getTasksForVolunteer(
+    String memberId,
+  ) async {
+    final db = await database;
 
+    return await db.query(
+      'tasks',
+      where: 'assigned_to_member_id = ?',
+      whereArgs: [memberId],
+      orderBy: 'created_at DESC',
+    );
+  }
 
-}
+  static Future<List<Map<String, dynamic>>> getAllTasks() async {
+    final db = await database;
+
+    return await db.query(
+      'tasks',
+      orderBy: 'created_at DESC',
+    );
+  }
+
+  static Future<bool> updateTaskStatus({
+    required int taskId,
+    required String status,
+  }) async {
+    final db = await database;
+
+    final count = await db.update(
+      'tasks',
+      {
+        'status': status,
+      },
+      where: 'id = ?',
+      whereArgs: [taskId],
+    );
+
+    return count > 0;
+  }
+
+  static Future<bool> deleteTask(int taskId) async {
+    final db = await database;
+
+    final count = await db.delete(
+      'tasks',
+      where: 'id = ?',
+      whereArgs: [taskId],
+    );
+
+    return count > 0;
+  }
 }
