@@ -24,7 +24,8 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
 
   List<Map<String, dynamic>> _volunteers = [];
 
-  Map<String, dynamic>? _selectedVolunteer;
+  // Store only the unique Member ID instead of the whole Map.
+  String? _selectedVolunteerId;
 
   String _selectedPriority = 'Medium';
 
@@ -54,14 +55,27 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
   }
 
   Future<void> _loadVolunteers() async {
-    final volunteers = await DatabaseService.getVolunteers();
+    try {
+      final volunteers = await DatabaseService.getVolunteers();
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    setState(() {
-      _volunteers = volunteers;
-      _isLoading = false;
-    });
+      setState(() {
+        _volunteers = volunteers;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+      });
+
+      _showMessage(
+        'Failed to load volunteers.',
+        isError: true,
+      );
+    }
   }
 
   Future<void> _selectDeadline() async {
@@ -99,7 +113,7 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
       return;
     }
 
-    if (_selectedVolunteer == null) {
+    if (_selectedVolunteerId == null) {
       _showMessage(
         'Please select a volunteer.',
         isError: true,
@@ -127,6 +141,26 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
       return;
     }
 
+    // Find the selected volunteer using the unique Member ID.
+    Map<String, dynamic>? selectedVolunteer;
+
+    for (final volunteer in _volunteers) {
+      final memberId = volunteer['member_id']?.toString();
+
+      if (memberId == _selectedVolunteerId) {
+        selectedVolunteer = volunteer;
+        break;
+      }
+    }
+
+    if (selectedVolunteer == null) {
+      _showMessage(
+        'Selected volunteer could not be found.',
+        isError: true,
+      );
+      return;
+    }
+
     setState(() {
       _isAssigning = true;
     });
@@ -135,12 +169,9 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
       await DatabaseService.createTask(
         title: _titleController.text.trim(),
         description: _descriptionController.text.trim(),
-        assignedToMemberId:
-            _selectedVolunteer!['member_id'] as String,
-        assignedByMemberId:
-            AuthService.memberId ?? '',
-        team:
-            _selectedVolunteer!['team'] as String? ??
+        assignedToMemberId: selectedVolunteer['member_id'].toString(),
+        assignedByMemberId: AuthService.memberId ?? '',
+        team: selectedVolunteer['team']?.toString() ??
             'Team not assigned',
         priority: _selectedPriority,
         deadline: _selectedDeadline!.toIso8601String(),
@@ -394,8 +425,7 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
                           const SizedBox(height: 16),
 
                           TextFormField(
-                            controller:
-                                _descriptionController,
+                            controller: _descriptionController,
                             maxLines: 5,
                             style: const TextStyle(
                               color: Colors.white,
@@ -501,7 +531,7 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
       child: const Row(
         children: [
           Icon(
-            Icons.assignment_add,
+            Icons.assignment_rounded,
             color: Colors.white,
             size: 38,
           ),
@@ -549,6 +579,26 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
   }
 
   Widget _buildVolunteerDropdown() {
+    // Make sure the selected ID still exists in the current list.
+    final validSelectedId =
+        _volunteers.any(
+          (volunteer) =>
+              volunteer['member_id']?.toString() ==
+              _selectedVolunteerId,
+        )
+            ? _selectedVolunteerId
+            : null;
+
+    if (validSelectedId != _selectedVolunteerId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+
+        setState(() {
+          _selectedVolunteerId = validSelectedId;
+        });
+      });
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: 16,
@@ -562,8 +612,8 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
         ),
       ),
       child: DropdownButtonHideUnderline(
-        child: DropdownButton<Map<String, dynamic>>(
-          value: _selectedVolunteer,
+        child: DropdownButton<String>(
+          value: validSelectedId,
           isExpanded: true,
           dropdownColor: const Color(0xFF0A2348),
           icon: const Icon(
@@ -587,18 +637,18 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
           ),
           items: _volunteers.map((volunteer) {
             final fullName =
-                volunteer['full_name'] as String? ??
+                volunteer['full_name']?.toString() ??
                     'Unknown Volunteer';
 
             final memberId =
-                volunteer['member_id'] as String? ?? '';
+                volunteer['member_id']?.toString() ?? '';
 
             final team =
-                volunteer['team'] as String? ??
+                volunteer['team']?.toString() ??
                     'Team not assigned';
 
-            return DropdownMenuItem<Map<String, dynamic>>(
-              value: volunteer,
+            return DropdownMenuItem<String>(
+              value: memberId,
               child: Row(
                 children: [
                   Container(
@@ -651,8 +701,10 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
             );
           }).toList(),
           onChanged: (value) {
+            if (value == null) return;
+
             setState(() {
-              _selectedVolunteer = value;
+              _selectedVolunteerId = value;
             });
           },
         ),
