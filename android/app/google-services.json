@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "217688417201",
+    "project_id": "ieee-aiub-volunteer-hub",
+    "storage_bucket": "ieee-aiub-volunteer-hub.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:217688417201:android:87f45e0d11b6d0e2881390",
+        "android_client_info": {
+          "package_name": "com.example.ieee_volunteer_hub"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAjPkC7g_STtECbo1Zbx2aXMBDnFQfY0ls"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

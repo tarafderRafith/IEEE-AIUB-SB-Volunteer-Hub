@@ -76,7 +76,44 @@ class AuthService {
     password = user['password'] as String?;
     role = user['role'] as String?;
     team = user['team'] as String?;
-    executivePosition = user['executive_position'] as String?;
+    executivePosition =
+        user['executive_position'] as String?;
+
+    return true;
+  }
+
+  static Future<bool> updateProfile({
+    required String fullNameValue,
+    required String emailValue,
+    required String phoneValue,
+    required String departmentValue,
+    required String teamValue,
+  }) async {
+    final currentMemberId = memberId?.trim();
+
+    if (currentMemberId == null ||
+        currentMemberId.isEmpty) {
+      return false;
+    }
+
+    final success = await DatabaseService.updateUser(
+      memberId: currentMemberId,
+      fullName: fullNameValue,
+      email: emailValue,
+      phone: phoneValue,
+      department: departmentValue,
+      team: teamValue,
+    );
+
+    if (!success) {
+      return false;
+    }
+
+    fullName = fullNameValue.trim();
+    email = emailValue.trim();
+    phone = phoneValue.trim();
+    department = departmentValue.trim();
+    team = teamValue.trim();
 
     return true;
   }

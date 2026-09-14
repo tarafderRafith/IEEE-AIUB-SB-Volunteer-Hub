@@ -383,6 +383,56 @@ class DatabaseService {
     );
   }
 
+  static Future<bool> updateUser({
+    required String memberId,
+    required String fullName,
+    required String email,
+    required String phone,
+    required String department,
+    required String team,
+  }) async {
+    try {
+      final db = await database;
+
+      final normalizedMemberId = memberId.trim();
+
+      if (normalizedMemberId.isEmpty) {
+        return false;
+      }
+
+      final count = await db.update(
+        'users',
+        {
+          'full_name': fullName.trim(),
+          'email': email.trim(),
+          'phone': phone.trim(),
+          'department': department.trim(),
+          'team': team.trim(),
+        },
+        where: 'member_id = ?',
+        whereArgs: [normalizedMemberId],
+      );
+
+      if (count > 0) {
+        debugPrint(
+          '✅ User profile updated: $normalizedMemberId',
+        );
+      } else {
+        debugPrint(
+          '⚠️ No user found to update: $normalizedMemberId',
+        );
+      }
+
+      return count > 0;
+    } catch (e) {
+      debugPrint(
+        '❌ Profile update error: $e',
+      );
+
+      return false;
+    }
+  }
+
   // ============================================================
   // TASK METHODS
   // ============================================================
