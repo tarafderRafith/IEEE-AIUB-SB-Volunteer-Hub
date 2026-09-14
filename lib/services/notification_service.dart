@@ -25,6 +25,14 @@ class NotificationService {
         requestAlertPermission: false,
         requestBadgePermission: false,
         requestSoundPermission: false,
+
+        // Explicitly tell iOS to present notifications
+        // while the app is in the foreground.
+        defaultPresentAlert: true,
+        defaultPresentSound: true,
+        defaultPresentBadge: true,
+        defaultPresentBanner: true,
+        defaultPresentList: true,
       );
 
       const initializationSettings = InitializationSettings(
@@ -98,8 +106,11 @@ class NotificationService {
 
       const iosDetails = DarwinNotificationDetails(
         presentAlert: true,
+        presentBanner: true,
+        presentList: true,
         presentBadge: true,
         presentSound: true,
+        interruptionLevel: InterruptionLevel.active,
       );
 
       const notificationDetails = NotificationDetails(

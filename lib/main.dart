@@ -9,17 +9,14 @@ import 'services/fcm_service.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase.
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // Register the FCM background message handler.
   FirebaseMessaging.onBackgroundMessage(
     firebaseMessagingBackgroundHandler,
   );
 
-  // Initialize Firebase Cloud Messaging.
   await FCMService.instance.initialize();
 
   runApp(const VolunteerHubApp());
