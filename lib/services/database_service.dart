@@ -5,10 +5,9 @@ import 'package:sqflite/sqflite.dart';
 class DatabaseService {
   static Database? _database;
 
-  static const String _databaseName =
-      'ieee_volunteer_hub.db';
+  static const String _databaseName = 'ieee_volunteer_hub.db';
 
-  static const int _databaseVersion = 6;
+  static const int _databaseVersion = 7;
 
   static Future<Database> get database async {
     if (_database != null) {
@@ -21,13 +20,14 @@ class DatabaseService {
   }
 
   static Future<Database> _initDatabase() async {
-    final databasePath =
-        await getDatabasesPath();
+    final databasePath = await getDatabasesPath();
 
     final path = join(
       databasePath,
       _databaseName,
     );
+
+    debugPrint('📦 Opening database: $path');
 
     return await openDatabase(
       path,
@@ -90,6 +90,21 @@ class DatabaseService {
         updated_at TEXT NOT NULL
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        recipient_member_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        type TEXT NOT NULL,
+        reference_id INTEGER,
+        is_read INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      )
+    ''');
+
+    debugPrint('✅ Database created successfully.');
   }
 
   static Future<bool> _columnExists(
@@ -130,6 +145,10 @@ class DatabaseService {
     int oldVersion,
     int newVersion,
   ) async {
+    debugPrint(
+      '⬆️ Database upgrade: $oldVersion → $newVersion',
+    );
+
     if (oldVersion < 2) {
       await _addColumnIfMissing(
         db,
@@ -210,10 +229,29 @@ class DatabaseService {
         )
       ''');
     }
+
+    if (oldVersion < 7) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS notifications (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          recipient_member_id TEXT NOT NULL,
+          title TEXT NOT NULL,
+          message TEXT NOT NULL,
+          type TEXT NOT NULL,
+          reference_id INTEGER,
+          is_read INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL
+        )
+      ''');
+
+      debugPrint(
+        '✅ Notifications table created during migration.',
+      );
+    }
   }
 
   // ============================================================
-  // USERS
+  // USER METHODS
   // ============================================================
 
   static Future<bool> registerUser({
@@ -241,11 +279,9 @@ class DatabaseService {
           'password': password,
           'role': role,
           'team': team,
-          'executive_position':
-              executivePosition,
+          'executive_position': executivePosition,
         },
-        conflictAlgorithm:
-            ConflictAlgorithm.abort,
+        conflictAlgorithm: ConflictAlgorithm.abort,
       );
 
       return true;
@@ -274,8 +310,7 @@ class DatabaseService {
     return result.isNotEmpty;
   }
 
-  static Future<Map<String, dynamic>?>
-      loginUser({
+  static Future<Map<String, dynamic>?> loginUser({
     required String memberId,
     required String password,
   }) async {
@@ -283,8 +318,7 @@ class DatabaseService {
 
     final result = await db.query(
       'users',
-      where:
-          'member_id = ? AND password = ?',
+      where: 'member_id = ? AND password = ?',
       whereArgs: [
         memberId,
         password,
@@ -299,8 +333,7 @@ class DatabaseService {
     return result.first;
   }
 
-  static Future<Map<String, dynamic>?>
-      getUserByMemberId(
+  static Future<Map<String, dynamic>?> getUserByMemberId(
     String memberId,
   ) async {
     final db = await database;
@@ -319,8 +352,7 @@ class DatabaseService {
     return result.first;
   }
 
-  static Future<List<Map<String, dynamic>>>
-      getVolunteers() async {
+  static Future<List<Map<String, dynamic>>> getVolunteers() async {
     final db = await database;
 
     return await db.query(
@@ -331,8 +363,7 @@ class DatabaseService {
     );
   }
 
-  static Future<List<Map<String, dynamic>>>
-      getExecutives() async {
+  static Future<List<Map<String, dynamic>>> getExecutives() async {
     final db = await database;
 
     return await db.query(
@@ -343,8 +374,17 @@ class DatabaseService {
     );
   }
 
+  static Future<List<Map<String, dynamic>>> getAllUsers() async {
+    final db = await database;
+
+    return await db.query(
+      'users',
+      orderBy: 'full_name ASC',
+    );
+  }
+
   // ============================================================
-  // TASKS
+  // TASK METHODS
   // ============================================================
 
   static Future<int> createTask({
@@ -359,18 +399,15 @@ class DatabaseService {
   }) async {
     final db = await database;
 
-    final now =
-        DateTime.now().toIso8601String();
+    final now = DateTime.now().toIso8601String();
 
-    return await db.insert(
+    final taskId = await db.insert(
       'tasks',
       {
         'title': title,
         'description': description,
-        'assigned_to_member_id':
-            assignedToMemberId,
-        'assigned_by_member_id':
-            assignedByMemberId,
+        'assigned_to_member_id': assignedToMemberId,
+        'assigned_by_member_id': assignedByMemberId,
         'team': team,
         'priority': priority,
         'deadline': deadline,
@@ -382,10 +419,19 @@ class DatabaseService {
         'updated_at': now,
       },
     );
+
+    debugPrint(
+      '✅ Task created. ID: $taskId',
+    );
+
+    debugPrint(
+      '👤 Assigned to: $assignedToMemberId',
+    );
+
+    return taskId;
   }
 
-  static Future<List<Map<String, dynamic>>>
-      getTasksForVolunteer(
+  static Future<List<Map<String, dynamic>>> getTasksForVolunteer(
     String memberId,
   ) async {
     final db = await database;
@@ -420,8 +466,7 @@ class DatabaseService {
     ]);
   }
 
-  static Future<List<Map<String, dynamic>>>
-      getTasksAssignedByExecutive(
+  static Future<List<Map<String, dynamic>>> getTasksAssignedByExecutive(
     String executiveMemberId,
   ) async {
     final db = await database;
@@ -456,8 +501,7 @@ class DatabaseService {
     ]);
   }
 
-  static Future<List<Map<String, dynamic>>>
-      getAllTasks() async {
+  static Future<List<Map<String, dynamic>>> getAllTasks() async {
     final db = await database;
 
     return await db.rawQuery('''
@@ -505,8 +549,7 @@ class DatabaseService {
   }) async {
     final db = await database;
 
-    final now =
-        DateTime.now().toIso8601String();
+    final now = DateTime.now().toIso8601String();
 
     if (status != 'Pending' &&
         status != 'In Process' &&
@@ -514,13 +557,16 @@ class DatabaseService {
       return false;
     }
 
-    final existingTask =
-        await db.query(
+    final existingTask = await db.query(
       'tasks',
       columns: [
         'id',
+        'status',
         'started_at',
         'completed_at',
+        'assigned_to_member_id',
+        'assigned_by_member_id',
+        'title',
       ],
       where: 'id = ?',
       whereArgs: [taskId],
@@ -531,30 +577,31 @@ class DatabaseService {
       return false;
     }
 
-    final currentTask =
-        existingTask.first;
+    final currentTask = existingTask.first;
+
+    final existingStartedAt =
+        currentTask['started_at']?.toString();
 
     final Map<String, dynamic> values = {
       'status': status,
       'updated_at': now,
     };
 
-    if (status == 'In Process') {
-      final existingStartedAt =
-          currentTask['started_at']
-              ?.toString();
+    if (status == 'Pending') {
+      values['started_at'] = null;
+      values['completed_at'] = null;
+    }
 
+    if (status == 'In Process') {
       if (existingStartedAt == null ||
           existingStartedAt.isEmpty) {
         values['started_at'] = now;
       }
+
+      values['completed_at'] = null;
     }
 
     if (status == 'Done') {
-      final existingStartedAt =
-          currentTask['started_at']
-              ?.toString();
-
       if (existingStartedAt == null ||
           existingStartedAt.isEmpty) {
         values['started_at'] = now;
@@ -588,7 +635,7 @@ class DatabaseService {
   }
 
   // ============================================================
-  // EVENTS
+  // EVENT METHODS
   // ============================================================
 
   static Future<int> createEvent({
@@ -603,8 +650,7 @@ class DatabaseService {
   }) async {
     final db = await database;
 
-    final now =
-        DateTime.now().toIso8601String();
+    final now = DateTime.now().toIso8601String();
 
     return await db.insert(
       'events',
@@ -616,16 +662,14 @@ class DatabaseService {
         'location': location,
         'event_type': eventType,
         'organizer': organizer,
-        'created_by_member_id':
-            createdByMemberId,
+        'created_by_member_id': createdByMemberId,
         'created_at': now,
         'updated_at': now,
       },
     );
   }
 
-  static Future<List<Map<String, dynamic>>>
-      getAllEvents() async {
+  static Future<List<Map<String, dynamic>>> getAllEvents() async {
     final db = await database;
 
     return await db.query(
@@ -634,8 +678,7 @@ class DatabaseService {
     );
   }
 
-  static Future<Map<String, dynamic>?>
-      getEventById(
+  static Future<Map<String, dynamic>?> getEventById(
     int eventId,
   ) async {
     final db = await database;
@@ -663,6 +706,191 @@ class DatabaseService {
       'events',
       where: 'id = ?',
       whereArgs: [eventId],
+    );
+
+    return count > 0;
+  }
+
+  // ============================================================
+  // NOTIFICATION METHODS
+  // ============================================================
+
+  static Future<int> createNotification({
+    required String recipientMemberId,
+    required String title,
+    required String message,
+    required String type,
+    int? referenceId,
+  }) async {
+    final db = await database;
+
+    final recipientId = recipientMemberId.trim();
+
+    if (recipientId.isEmpty) {
+      throw Exception(
+        'Notification recipient member ID is empty.',
+      );
+    }
+
+    final now = DateTime.now().toIso8601String();
+
+    debugPrint('');
+    debugPrint('🔔 ===============================');
+    debugPrint('🔔 CREATING NOTIFICATION');
+    debugPrint('🔔 Recipient: $recipientId');
+    debugPrint('🔔 Title: $title');
+    debugPrint('🔔 Type: $type');
+    debugPrint('🔔 Reference ID: $referenceId');
+    debugPrint('🔔 ===============================');
+
+    final notificationId = await db.insert(
+      'notifications',
+      {
+        'recipient_member_id': recipientId,
+        'title': title,
+        'message': message,
+        'type': type,
+        'reference_id': referenceId,
+        'is_read': 0,
+        'created_at': now,
+      },
+    );
+
+    debugPrint(
+      '✅ Notification inserted. ID: $notificationId',
+    );
+
+    final verification = await db.query(
+      'notifications',
+      where: 'id = ?',
+      whereArgs: [notificationId],
+      limit: 1,
+    );
+
+    if (verification.isEmpty) {
+      throw Exception(
+        'Notification was inserted but could not be verified.',
+      );
+    }
+
+    debugPrint(
+      '✅ Notification verified successfully.',
+    );
+
+    debugPrint(
+      '🔔 ===============================',
+    );
+    debugPrint('');
+
+    return notificationId;
+  }
+
+  static Future<List<Map<String, dynamic>>> getNotificationsForMember(
+    String memberId,
+  ) async {
+    final db = await database;
+
+    final normalizedMemberId = memberId.trim();
+
+    debugPrint(
+      '🔎 Loading notifications for: $normalizedMemberId',
+    );
+
+    final result = await db.query(
+      'notifications',
+      where: 'recipient_member_id = ?',
+      whereArgs: [normalizedMemberId],
+      orderBy: 'created_at DESC',
+    );
+
+    debugPrint(
+      '🔎 Found ${result.length} notification(s) for '
+      '$normalizedMemberId',
+    );
+
+    return result;
+  }
+
+  static Future<int> getUnreadNotificationCount(
+    String memberId,
+  ) async {
+    final db = await database;
+
+    final normalizedMemberId = memberId.trim();
+
+    final result = await db.rawQuery('''
+      SELECT COUNT(*) AS unread_count
+      FROM notifications
+      WHERE recipient_member_id = ?
+        AND is_read = 0
+    ''', [
+      normalizedMemberId,
+    ]);
+
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  static Future<bool> markNotificationAsRead(
+    int notificationId,
+  ) async {
+    final db = await database;
+
+    final count = await db.update(
+      'notifications',
+      {
+        'is_read': 1,
+      },
+      where: 'id = ?',
+      whereArgs: [notificationId],
+    );
+
+    return count > 0;
+  }
+
+  static Future<bool> markAllNotificationsAsRead(
+    String memberId,
+  ) async {
+    final db = await database;
+
+    final normalizedMemberId = memberId.trim();
+
+    final count = await db.update(
+      'notifications',
+      {
+        'is_read': 1,
+      },
+      where: 'recipient_member_id = ? AND is_read = 0',
+      whereArgs: [normalizedMemberId],
+    );
+
+    return count > 0;
+  }
+
+  static Future<bool> deleteNotification(
+    int notificationId,
+  ) async {
+    final db = await database;
+
+    final count = await db.delete(
+      'notifications',
+      where: 'id = ?',
+      whereArgs: [notificationId],
+    );
+
+    return count > 0;
+  }
+
+  static Future<bool> deleteAllNotifications(
+    String memberId,
+  ) async {
+    final db = await database;
+
+    final normalizedMemberId = memberId.trim();
+
+    final count = await db.delete(
+      'notifications',
+      where: 'recipient_member_id = ?',
+      whereArgs: [normalizedMemberId],
     );
 
     return count > 0;

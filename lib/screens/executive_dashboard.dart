@@ -30,11 +30,9 @@ class _ExecutiveDashboardState extends State<ExecutiveDashboard> {
 
   Timer? _liveRefreshTimer;
 
-  String get name =>
-      AuthService.fullName ?? 'Executive';
+  String get name => AuthService.fullName ?? 'Executive';
 
-  String get team =>
-      AuthService.team ?? 'Team not assigned';
+  String get team => AuthService.team ?? 'Team not assigned';
 
   String get position =>
       AuthService.executivePosition ?? 'Executive';
@@ -215,14 +213,22 @@ class _ExecutiveDashboardState extends State<ExecutiveDashboard> {
   }
 
   Future<void> _openAssignTask() async {
-    await Navigator.push(
+    final taskCreated = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
         builder: (context) => const AssignTaskScreen(),
       ),
     );
 
-    await _loadDashboardData();
+    if (!mounted) return;
+
+    if (taskCreated == true) {
+      await _loadDashboardData();
+    } else {
+      await _loadDashboardData(
+        silent: true,
+      );
+    }
   }
 
   Future<void> _openCreateEvent() async {
@@ -271,6 +277,10 @@ class _ExecutiveDashboardState extends State<ExecutiveDashboard> {
           '$feature will be available in the next phase.',
         ),
         backgroundColor: const Color(0xFF0D5BD7),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
       ),
     );
   }
@@ -281,8 +291,7 @@ class _ExecutiveDashboardState extends State<ExecutiveDashboard> {
     final taskDeleted = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
-        builder: (context) =>
-            ExecutiveTaskDetailsScreen(
+        builder: (context) => ExecutiveTaskDetailsScreen(
           task: task,
         ),
       ),
@@ -318,6 +327,49 @@ class _ExecutiveDashboardState extends State<ExecutiveDashboard> {
     }).length;
   }
 
+  int get _pendingTaskCount {
+    return _assignedTasks.where((task) {
+      final status =
+          task['status']?.toString() ?? 'Pending';
+
+      return status == 'Pending';
+    }).length;
+  }
+
+  int get _inProcessTaskCount {
+    return _assignedTasks.where((task) {
+      final status =
+          task['status']?.toString() ?? 'Pending';
+
+      return status == 'In Process';
+    }).length;
+  }
+
+  int get _upcomingEventCount {
+    final now = DateTime.now();
+
+    return _events.where((event) {
+      final eventDateTime =
+          _getEventDateTime(event);
+
+      if (eventDateTime == null) {
+        return false;
+      }
+
+      return eventDateTime.isAfter(now);
+    }).length;
+  }
+
+  double get _completionPercentage {
+    if (_assignedTasks.isEmpty) {
+      return 0;
+    }
+
+    return (_completedTaskCount /
+            _assignedTasks.length) *
+        100;
+  }
+
   DateTime? _getEventDateTime(
     Map<String, dynamic> event,
   ) {
@@ -337,9 +389,51 @@ class _ExecutiveDashboardState extends State<ExecutiveDashboard> {
       parsedDateTime = DateTime.tryParse(
         '$rawDate $rawTime',
       );
+
+      if (parsedDateTime == null) {
+        final upperTime = rawTime.toUpperCase();
+
+        final match = RegExp(
+          r'^(\d{1,2}):(\d{2})\s*(AM|PM)$',
+        ).firstMatch(upperTime);
+
+        if (match != null) {
+          int hour = int.parse(
+            match.group(1)!,
+          );
+
+          final minute = int.parse(
+            match.group(2)!,
+          );
+
+          final period = match.group(3)!;
+
+          if (period == 'PM' && hour != 12) {
+            hour += 12;
+          }
+
+          if (period == 'AM' && hour == 12) {
+            hour = 0;
+          }
+
+          final parsedDate =
+              DateTime.tryParse(rawDate);
+
+          if (parsedDate != null) {
+            parsedDateTime = DateTime(
+              parsedDate.year,
+              parsedDate.month,
+              parsedDate.day,
+              hour,
+              minute,
+            );
+          }
+        }
+      }
     }
 
-    parsedDateTime ??= DateTime.tryParse(rawDate);
+    parsedDateTime ??=
+        DateTime.tryParse(rawDate);
 
     return parsedDateTime;
   }
@@ -367,11 +461,8 @@ class _ExecutiveDashboardState extends State<ExecutiveDashboard> {
     }
 
     futureEvents.sort((a, b) {
-      final dateA =
-          _getEventDateTime(a);
-
-      final dateB =
-          _getEventDateTime(b);
+      final dateA = _getEventDateTime(a);
+      final dateB = _getEventDateTime(b);
 
       if (dateA == null && dateB == null) {
         return 0;
@@ -389,6 +480,89 @@ class _ExecutiveDashboardState extends State<ExecutiveDashboard> {
     });
 
     return futureEvents.first;
+  }
+
+  List<Map<String, dynamic>> get _sortedTasks {
+    final tasks =
+        List<Map<String, dynamic>>.from(
+      _assignedTasks,
+    );
+
+    int statusRank(
+      Map<String, dynamic> task,
+    ) {
+      final status =
+          task['status']?.toString() ??
+              'Pending';
+
+      switch (status) {
+        case 'Pending':
+          return 0;
+        case 'In Process':
+          return 1;
+        case 'Done':
+          return 2;
+        default:
+          return 3;
+      }
+    }
+
+    DateTime? taskDate(
+      Map<String, dynamic> task,
+    ) {
+      final updated =
+          task['updated_at']?.toString();
+
+      if (updated != null &&
+          updated.isNotEmpty) {
+        final parsed =
+            DateTime.tryParse(updated);
+
+        if (parsed != null) {
+          return parsed;
+        }
+      }
+
+      final created =
+          task['created_at']?.toString();
+
+      if (created != null &&
+          created.isNotEmpty) {
+        return DateTime.tryParse(created);
+      }
+
+      return null;
+    }
+
+    tasks.sort((a, b) {
+      final rankComparison =
+          statusRank(a).compareTo(
+        statusRank(b),
+      );
+
+      if (rankComparison != 0) {
+        return rankComparison;
+      }
+
+      final dateA = taskDate(a);
+      final dateB = taskDate(b);
+
+      if (dateA == null && dateB == null) {
+        return 0;
+      }
+
+      if (dateA == null) {
+        return 1;
+      }
+
+      if (dateB == null) {
+        return -1;
+      }
+
+      return dateB.compareTo(dateA);
+    });
+
+    return tasks;
   }
 
   @override
@@ -439,6 +613,10 @@ class _ExecutiveDashboardState extends State<ExecutiveDashboard> {
 
                 _buildOverview(),
 
+                const SizedBox(height: 20),
+
+                _buildProgressOverview(),
+
                 const SizedBox(height: 28),
 
                 _buildSectionTitle(
@@ -454,6 +632,10 @@ class _ExecutiveDashboardState extends State<ExecutiveDashboard> {
                 _buildTaskActivityHeader(),
 
                 const SizedBox(height: 12),
+
+                _buildTaskManagementSummary(),
+
+                const SizedBox(height: 14),
 
                 _buildRecentActivity(),
               ],
@@ -787,7 +969,7 @@ class _ExecutiveDashboardState extends State<ExecutiveDashboard> {
             label: 'Volunteers',
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         Expanded(
           child: _overviewCard(
             icon: Icons.assignment_rounded,
@@ -796,7 +978,7 @@ class _ExecutiveDashboardState extends State<ExecutiveDashboard> {
             label: 'Active Tasks',
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         Expanded(
           child: _overviewCard(
             icon:
@@ -804,6 +986,16 @@ class _ExecutiveDashboardState extends State<ExecutiveDashboard> {
             value:
                 _completedTaskCount.toString(),
             label: 'Completed',
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _overviewCard(
+            icon:
+                Icons.event_available_rounded,
+            value:
+                _upcomingEventCount.toString(),
+            label: 'Events',
           ),
         ),
       ],
@@ -818,8 +1010,8 @@ class _ExecutiveDashboardState extends State<ExecutiveDashboard> {
     return Container(
       padding:
           const EdgeInsets.symmetric(
-        vertical: 18,
-        horizontal: 10,
+        vertical: 17,
+        horizontal: 5,
       ),
       decoration: BoxDecoration(
         color: const Color(0xFF0A2348),
@@ -834,14 +1026,14 @@ class _ExecutiveDashboardState extends State<ExecutiveDashboard> {
           Icon(
             icon,
             color: const Color(0xFF4D91FF),
-            size: 23,
+            size: 22,
           ),
           const SizedBox(height: 8),
           Text(
             value,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 21,
+              fontSize: 20,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -849,13 +1041,166 @@ class _ExecutiveDashboardState extends State<ExecutiveDashboard> {
           Text(
             label,
             textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow:
+                TextOverflow.ellipsis,
             style: const TextStyle(
               color: Colors.white54,
-              fontSize: 10,
+              fontSize: 9,
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildProgressOverview() {
+    final percentage =
+        _completionPercentage;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(17),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A2348),
+        borderRadius:
+            BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white10,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.insights_rounded,
+                color: Color(0xFF4D91FF),
+                size: 20,
+              ),
+              const SizedBox(width: 9),
+              const Expanded(
+                child: Text(
+                  'Task Progress',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Text(
+                '${percentage.toStringAsFixed(0)}%',
+                style: const TextStyle(
+                  color: Color(0xFF6EA6FF),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 13),
+          ClipRRect(
+            borderRadius:
+                BorderRadius.circular(10),
+            child: LinearProgressIndicator(
+              value: _assignedTasks.isEmpty
+                  ? 0
+                  : percentage / 100,
+              minHeight: 8,
+              backgroundColor:
+                  const Color(0xFF061A36),
+              valueColor:
+                  const AlwaysStoppedAnimation<
+                      Color>(
+                Color(0xFF3D8BFF),
+              ),
+            ),
+          ),
+          const SizedBox(height: 13),
+          Row(
+            children: [
+              Expanded(
+                child: _miniProgressStat(
+                  icon:
+                      Icons.pending_actions_rounded,
+                  value:
+                      _pendingTaskCount
+                          .toString(),
+                  label: 'Pending',
+                  color:
+                      const Color(0xFF4D91FF),
+                ),
+              ),
+              Expanded(
+                child: _miniProgressStat(
+                  icon:
+                      Icons.timelapse_rounded,
+                  value:
+                      _inProcessTaskCount
+                          .toString(),
+                  label: 'In Process',
+                  color:
+                      const Color(0xFFFFB74D),
+                ),
+              ),
+              Expanded(
+                child: _miniProgressStat(
+                  icon:
+                      Icons.check_circle_outline,
+                  value:
+                      _completedTaskCount
+                          .toString(),
+                  label: 'Done',
+                  color:
+                      const Color(0xFF55D88A),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _miniProgressStat({
+    required IconData icon,
+    required String value,
+    required String label,
+    required Color color,
+  }) {
+    return Row(
+      children: [
+        Icon(
+          icon,
+          color: color,
+          size: 16,
+        ),
+        const SizedBox(width: 6),
+        Column(
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                color: color,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white38,
+                fontSize: 8,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -1125,7 +1470,8 @@ class _ExecutiveDashboardState extends State<ExecutiveDashboard> {
                     text: date,
                   ),
                   _eventInfoItem(
-                    icon: Icons.access_time_rounded,
+                    icon:
+                        Icons.access_time_rounded,
                     text: time,
                   ),
                   _eventInfoItem(
@@ -1254,6 +1600,108 @@ class _ExecutiveDashboardState extends State<ExecutiveDashboard> {
     );
   }
 
+  Widget _buildTaskManagementSummary() {
+    if (_assignedTasks.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: const Color(0xFF061A36),
+        borderRadius:
+            BorderRadius.circular(18),
+        border: Border.all(
+          color: Colors.white10,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _taskSummaryItem(
+              icon:
+                  Icons.pending_actions_rounded,
+              label: 'Pending',
+              value:
+                  _pendingTaskCount.toString(),
+              color:
+                  const Color(0xFF4D91FF),
+            ),
+          ),
+          _summaryDivider(),
+          Expanded(
+            child: _taskSummaryItem(
+              icon:
+                  Icons.timelapse_rounded,
+              label: 'Working',
+              value:
+                  _inProcessTaskCount
+                      .toString(),
+              color:
+                  const Color(0xFFFFB74D),
+            ),
+          ),
+          _summaryDivider(),
+          Expanded(
+            child: _taskSummaryItem(
+              icon:
+                  Icons.check_circle_rounded,
+              label: 'Done',
+              value:
+                  _completedTaskCount
+                      .toString(),
+              color:
+                  const Color(0xFF55D88A),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _taskSummaryItem({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Column(
+      children: [
+        Icon(
+          icon,
+          color: color,
+          size: 19,
+        ),
+        const SizedBox(height: 6),
+        Text(
+          value,
+          style: TextStyle(
+            color: color,
+            fontSize: 17,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white54,
+            fontSize: 9,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _summaryDivider() {
+    return Container(
+      width: 1,
+      height: 42,
+      color: Colors.white10,
+    );
+  }
+
   Widget _buildRecentActivity() {
     if (_isLoading &&
         _assignedTasks.isEmpty) {
@@ -1342,20 +1790,19 @@ class _ExecutiveDashboardState extends State<ExecutiveDashboard> {
       );
     }
 
+    final tasks = _sortedTasks;
+
     return Column(
       children: List.generate(
-        _assignedTasks.length,
+        tasks.length,
         (index) {
-          final task =
-              _assignedTasks[index];
+          final task = tasks[index];
 
           return Padding(
             padding:
                 EdgeInsets.only(
               bottom:
-                  index ==
-                          _assignedTasks.length -
-                              1
+                  index == tasks.length - 1
                       ? 0
                       : 10,
             ),
@@ -1386,6 +1833,8 @@ class _ExecutiveDashboardState extends State<ExecutiveDashboard> {
     final volunteerId =
         task['volunteer_member_id']
                 ?.toString() ??
+            task['assigned_to_member_id']
+                ?.toString() ??
             '';
 
     final volunteerTeam =
@@ -1400,6 +1849,13 @@ class _ExecutiveDashboardState extends State<ExecutiveDashboard> {
     final priority =
         task['priority']?.toString() ??
             'Medium';
+
+    final deadline =
+        task['deadline']?.toString();
+
+    final points =
+        task['points']?.toString() ??
+            '0';
 
     final updatedAt =
         task['updated_at']?.toString();
@@ -1503,7 +1959,9 @@ class _ExecutiveDashboardState extends State<ExecutiveDashboard> {
                   ),
                 ],
               ),
+
               const SizedBox(height: 13),
+
               Container(
                 width: double.infinity,
                 padding:
@@ -1549,6 +2007,7 @@ class _ExecutiveDashboardState extends State<ExecutiveDashboard> {
                         ),
                       ],
                     ),
+
                     if (description
                         .isNotEmpty) ...[
                       const SizedBox(height: 9),
@@ -1565,10 +2024,42 @@ class _ExecutiveDashboardState extends State<ExecutiveDashboard> {
                         ),
                       ),
                     ],
+
+                    const SizedBox(height: 11),
+
+                    Row(
+                      children: [
+                        if (deadline != null &&
+                            deadline.isNotEmpty)
+                          Expanded(
+                            child:
+                                _taskInfoItem(
+                              icon: Icons
+                                  .calendar_today_rounded,
+                              label: 'Deadline',
+                              value:
+                                  _formatTaskDeadline(
+                                deadline,
+                              ),
+                            ),
+                          ),
+                        Expanded(
+                          child: _taskInfoItem(
+                            icon:
+                                Icons.stars_rounded,
+                            label: 'Points',
+                            value:
+                                '$points pts',
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
+
               const SizedBox(height: 12),
+
               _buildTimeline(
                 status: status,
                 updatedAt: updatedAt,
@@ -1576,7 +2067,9 @@ class _ExecutiveDashboardState extends State<ExecutiveDashboard> {
                 completedAt:
                     completedAt,
               ),
+
               const SizedBox(height: 10),
+
               Row(
                 mainAxisAlignment:
                     MainAxisAlignment.end,
@@ -1607,6 +2100,78 @@ class _ExecutiveDashboardState extends State<ExecutiveDashboard> {
         ),
       ),
     );
+  }
+
+  Widget _taskInfoItem({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Row(
+      children: [
+        Icon(
+          icon,
+          color: const Color(0xFF4D91FF),
+          size: 15,
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Column(
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white30,
+                  fontSize: 8,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                maxLines: 1,
+                overflow:
+                    TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _formatTaskDeadline(
+    String value,
+  ) {
+    final parsed =
+        DateTime.tryParse(value);
+
+    if (parsed == null) {
+      return value;
+    }
+
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+
+    return '${months[parsed.month - 1]} ${parsed.day}, ${parsed.year}';
   }
 
   Widget _buildTimeline({
