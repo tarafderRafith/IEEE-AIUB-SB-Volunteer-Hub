@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("IEEEVolunteerHub.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+040a49ddcf9bc6ee7af202867223df28a77e0de3")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3285f15751f580ace65f6571b27bc7fdeb43a6ba")]
 [assembly: System.Reflection.AssemblyProductAttribute("IEEEVolunteerHub.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("IEEEVolunteerHub.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
