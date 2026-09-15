@@ -5,7 +5,8 @@ namespace IEEEVolunteerHub.Api.Data;
 
 public class ApplicationDbContext : DbContext
 {
-    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
+    public ApplicationDbContext(
+        DbContextOptions<ApplicationDbContext> options)
         : base(options)
     {
     }
@@ -14,9 +15,14 @@ public class ApplicationDbContext : DbContext
 
     public DbSet<VolunteerTask> Tasks => Set<VolunteerTask>();
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    protected override void OnModelCreating(
+        ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        // =====================================================
+        // USERS
+        // =====================================================
 
         modelBuilder.Entity<User>(entity =>
         {
@@ -63,6 +69,10 @@ public class ApplicationDbContext : DbContext
                 .IsRequired();
         });
 
+        // =====================================================
+        // TASKS
+        // =====================================================
+
         modelBuilder.Entity<VolunteerTask>(entity =>
         {
             entity.HasKey(t => t.Id);
@@ -82,6 +92,16 @@ public class ApplicationDbContext : DbContext
                 .IsRequired()
                 .HasMaxLength(50);
 
+            entity.Property(t => t.Team)
+                .HasMaxLength(100);
+
+            entity.Property(t => t.Priority)
+                .IsRequired()
+                .HasMaxLength(20);
+
+            entity.Property(t => t.Points)
+                .IsRequired();
+
             entity.Property(t => t.Status)
                 .IsRequired()
                 .HasMaxLength(30);
@@ -91,6 +111,8 @@ public class ApplicationDbContext : DbContext
             entity.HasIndex(t => t.AssignedByMemberId);
 
             entity.HasIndex(t => t.Status);
+
+            entity.HasIndex(t => t.Priority);
         });
     }
 }

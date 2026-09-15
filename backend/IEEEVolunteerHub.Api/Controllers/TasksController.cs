@@ -21,7 +21,7 @@ public class TasksController : ControllerBase
     }
 
     // =========================================================
-    // EXECUTIVE: CREATE AND ASSIGN TASK
+    // CREATE / ASSIGN TASK
     // =========================================================
 
     [HttpPost]
@@ -98,7 +98,45 @@ public class TasksController : ControllerBase
             });
         }
 
-        var task = new IEEEVolunteerHub.Api.Models.VolunteerTask
+        // Validate priority
+        string priority =
+            string.IsNullOrWhiteSpace(request.Priority)
+                ? "Medium"
+                : request.Priority.Trim();
+
+        var allowedPriorities = new[]
+        {
+            "Low",
+            "Medium",
+            "High"
+        };
+
+        if (!allowedPriorities.Contains(
+                priority,
+                StringComparer.OrdinalIgnoreCase))
+        {
+            return BadRequest(new
+            {
+                message = "Priority must be Low, Medium, or High."
+            });
+        }
+
+        // Normalize priority
+        priority = allowedPriorities
+            .First(p => p.Equals(
+                priority,
+                StringComparison.OrdinalIgnoreCase));
+
+        // Validate points
+        if (request.Points < 0 || request.Points > 1000)
+        {
+            return BadRequest(new
+            {
+                message = "Points must be between 0 and 1000."
+            });
+        }
+
+        var task = new VolunteerTask
         {
             Title = request.Title.Trim(),
 
@@ -108,13 +146,25 @@ public class TasksController : ControllerBase
 
             AssignedByMemberId = executiveMemberId,
 
+            Team = string.IsNullOrWhiteSpace(request.Team)
+                ? volunteer.Team
+                : request.Team.Trim(),
+
+            Priority = priority,
+
+            Points = request.Points,
+
             Status = "Pending",
 
             DueDate = request.DueDate,
 
             CreatedAt = DateTime.UtcNow,
 
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
+
+            StartedAt = null,
+
+            CompletedAt = null
         };
 
         _db.Tasks.Add(task);
@@ -132,18 +182,21 @@ public class TasksController : ControllerBase
                 task.Description,
                 task.AssignedToMemberId,
                 task.AssignedByMemberId,
+                task.Team,
+                task.Priority,
+                task.Points,
                 task.Status,
                 task.DueDate,
                 task.CreatedAt,
                 task.UpdatedAt,
+                task.StartedAt,
                 task.CompletedAt
             }
         });
     }
 
-
     // =========================================================
-    // VOLUNTEER: GET MY TASKS
+    // GET MY TASKS
     // =========================================================
 
     [HttpGet("my-tasks")]
@@ -163,7 +216,8 @@ public class TasksController : ControllerBase
         }
 
         var tasks = await _db.Tasks
-            .Where(t => t.AssignedToMemberId == memberId)
+            .Where(t =>
+                t.AssignedToMemberId == memberId)
             .OrderByDescending(t => t.CreatedAt)
             .Select(t => new
             {
@@ -172,10 +226,14 @@ public class TasksController : ControllerBase
                 t.Description,
                 t.AssignedToMemberId,
                 t.AssignedByMemberId,
+                t.Team,
+                t.Priority,
+                t.Points,
                 t.Status,
                 t.DueDate,
                 t.CreatedAt,
                 t.UpdatedAt,
+                t.StartedAt,
                 t.CompletedAt
             })
             .ToListAsync();
@@ -183,9 +241,8 @@ public class TasksController : ControllerBase
         return Ok(tasks);
     }
 
-
     // =========================================================
-    // VOLUNTEER: GET SINGLE TASK
+    // GET SINGLE TASK
     // =========================================================
 
     [HttpGet("{id:int}")]
@@ -200,7 +257,8 @@ public class TasksController : ControllerBase
             ?? string.Empty;
 
         var task = await _db.Tasks
-            .FirstOrDefaultAsync(t => t.Id == id);
+            .FirstOrDefaultAsync(t =>
+                t.Id == id);
 
         if (task == null)
         {
@@ -231,17 +289,20 @@ public class TasksController : ControllerBase
             task.Description,
             task.AssignedToMemberId,
             task.AssignedByMemberId,
+            task.Team,
+            task.Priority,
+            task.Points,
             task.Status,
             task.DueDate,
             task.CreatedAt,
             task.UpdatedAt,
+            task.StartedAt,
             task.CompletedAt
         });
     }
 
-
     // =========================================================
-    // VOLUNTEER: UPDATE TASK STATUS
+    // UPDATE TASK STATUS
     // =========================================================
 
     [HttpPut("{id:int}/status")]
@@ -290,12 +351,33 @@ public class TasksController : ControllerBase
 
         task.UpdatedAt = DateTime.UtcNow;
 
-        if (status == "Done")
+        // When volunteer starts the task
+        if (status == "In Process")
         {
+            if (task.StartedAt == null)
+            {
+                task.StartedAt = DateTime.UtcNow;
+            }
+
+            task.CompletedAt = null;
+        }
+
+        // When volunteer marks the task done
+        else if (status == "Done")
+        {
+            if (task.StartedAt == null)
+            {
+                task.StartedAt = DateTime.UtcNow;
+            }
+
             task.CompletedAt = DateTime.UtcNow;
         }
-        else
+
+        // When task is returned to pending
+        else if (status == "Pending")
         {
+            task.StartedAt = null;
+
             task.CompletedAt = null;
         }
 
@@ -303,7 +385,8 @@ public class TasksController : ControllerBase
 
         return Ok(new
         {
-            message = "Task status updated successfully.",
+            message =
+                "Task status updated successfully.",
 
             task = new
             {
@@ -312,18 +395,21 @@ public class TasksController : ControllerBase
                 task.Description,
                 task.AssignedToMemberId,
                 task.AssignedByMemberId,
+                task.Team,
+                task.Priority,
+                task.Points,
                 task.Status,
                 task.DueDate,
                 task.CreatedAt,
                 task.UpdatedAt,
+                task.StartedAt,
                 task.CompletedAt
             }
         });
     }
 
-
     // =========================================================
-    // EXECUTIVE: GET TASKS ASSIGNED BY ME
+    // TASKS ASSIGNED BY CURRENT EXECUTIVE
     // =========================================================
 
     [HttpGet("assigned-by-me")]
@@ -335,7 +421,8 @@ public class TasksController : ControllerBase
             ?? string.Empty;
 
         var tasks = await _db.Tasks
-            .Where(t => t.AssignedByMemberId == memberId)
+            .Where(t =>
+                t.AssignedByMemberId == memberId)
             .OrderByDescending(t => t.CreatedAt)
             .Select(t => new
             {
@@ -344,10 +431,14 @@ public class TasksController : ControllerBase
                 t.Description,
                 t.AssignedToMemberId,
                 t.AssignedByMemberId,
+                t.Team,
+                t.Priority,
+                t.Points,
                 t.Status,
                 t.DueDate,
                 t.CreatedAt,
                 t.UpdatedAt,
+                t.StartedAt,
                 t.CompletedAt
             })
             .ToListAsync();
@@ -355,9 +446,8 @@ public class TasksController : ControllerBase
         return Ok(tasks);
     }
 
-
     // =========================================================
-    // EXECUTIVE: GET ALL TASKS
+    // GET ALL TASKS
     // =========================================================
 
     [HttpGet("all")]
@@ -373,10 +463,14 @@ public class TasksController : ControllerBase
                 t.Description,
                 t.AssignedToMemberId,
                 t.AssignedByMemberId,
+                t.Team,
+                t.Priority,
+                t.Points,
                 t.Status,
                 t.DueDate,
                 t.CreatedAt,
                 t.UpdatedAt,
+                t.StartedAt,
                 t.CompletedAt
             })
             .ToListAsync();

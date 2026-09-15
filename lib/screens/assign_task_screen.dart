@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
-import '../services/database_service.dart';
+import '../services/task_service.dart';
 
 class AssignTaskScreen extends StatefulWidget {
   const AssignTaskScreen({super.key});
@@ -11,8 +11,6 @@ class AssignTaskScreen extends StatefulWidget {
 }
 
 class _AssignTaskScreenState extends State<AssignTaskScreen> {
-  final _formKey = GlobalKey<FormState>();
-
   final TextEditingController _titleController =
       TextEditingController();
 
@@ -20,7 +18,7 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
       TextEditingController();
 
   final TextEditingController _pointsController =
-      TextEditingController();
+      TextEditingController(text: '10');
 
   List<Map<String, dynamic>> _volunteers = [];
 
@@ -31,6 +29,7 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
   DateTime? _selectedDeadline;
 
   bool _isLoading = true;
+
   bool _isAssigning = false;
 
   final List<String> _priorities = [
@@ -53,61 +52,96 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
     super.dispose();
   }
 
-  Future<void> _loadVolunteers() async {
-    try {
-      final volunteers =
-          await DatabaseService.getVolunteers();
+  // ============================================================
+  // LOAD VOLUNTEERS FROM BACKEND
+  // ============================================================
 
-      if (!mounted) return;
+  Future<void> _loadVolunteers() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final volunteers = await TaskService.getVolunteers();
+
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _volunteers = volunteers;
+
+        if (_volunteers.isEmpty) {
+          _selectedVolunteerId = null;
+        } else {
+          final selectedStillExists = _volunteers.any(
+            (volunteer) =>
+                volunteer['memberId']?.toString() ==
+                _selectedVolunteerId,
+          );
+
+          if (!selectedStillExists) {
+            _selectedVolunteerId = null;
+          }
+        }
+
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint(
-        'Volunteer loading error: $e',
-      );
-
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
+        _volunteers = [];
+        _selectedVolunteerId = null;
         _isLoading = false;
       });
 
       _showMessage(
-        'Failed to load volunteers.',
+        'Could not load volunteers from the server.',
         isError: true,
       );
     }
   }
 
+  // ============================================================
+  // SELECT DEADLINE
+  // ============================================================
+
   Future<void> _selectDeadline() async {
     final now = DateTime.now();
+
+    final initialDate =
+        _selectedDeadline ?? now.add(const Duration(days: 1));
+
+    final firstDate = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    );
+
+    final lastDate = DateTime(
+      now.year + 5,
+      now.month,
+      now.day,
+    );
 
     final selectedDate = await showDatePicker(
       context: context,
       initialDate:
-          _selectedDeadline != null &&
-                  _selectedDeadline!.isAfter(
-                    DateTime(
-                      now.year,
-                      now.month,
-                      now.day,
-                    ),
-                  )
-              ? _selectedDeadline!
-              : now,
-      firstDate: now,
-      lastDate: DateTime(
-        now.year + 2,
-      ),
+          initialDate.isBefore(firstDate)
+              ? firstDate
+              : initialDate,
+      firstDate: firstDate,
+      lastDate: lastDate,
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.dark(
-              primary: Color(0xFF3D8BFF),
-              surface: Color(0xFF0A2348),
+              primary: Color(0xFF2F80ED),
+              surface: Color(0xFF0B2142),
+              onSurface: Colors.white,
             ),
           ),
           child: child!,
@@ -119,21 +153,69 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
       return;
     }
 
+    final selectedTime = await showTimePicker(
+      context: context,
+      initialTime:
+          _selectedDeadline != null
+              ? TimeOfDay.fromDateTime(_selectedDeadline!)
+              : const TimeOfDay(hour: 18, minute: 0),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: Color(0xFF2F80ED),
+              surface: Color(0xFF0B2142),
+              onSurface: Colors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (selectedTime == null || !mounted) {
+      return;
+    }
+
     setState(() {
       _selectedDeadline = DateTime(
         selectedDate.year,
         selectedDate.month,
         selectedDate.day,
+        selectedTime.hour,
+        selectedTime.minute,
       );
     });
   }
 
+  // ============================================================
+  // ASSIGN TASK
+  // ============================================================
+
   Future<void> _assignTask() async {
-    if (!_formKey.currentState!.validate()) {
+    final title = _titleController.text.trim();
+
+    final description =
+        _descriptionController.text.trim();
+
+    if (title.isEmpty) {
+      _showMessage(
+        'Please enter a task title.',
+        isError: true,
+      );
       return;
     }
 
-    if (_selectedVolunteerId == null) {
+    if (description.isEmpty) {
+      _showMessage(
+        'Please enter a task description.',
+        isError: true,
+      );
+      return;
+    }
+
+    if (_selectedVolunteerId == null ||
+        _selectedVolunteerId!.isEmpty) {
       _showMessage(
         'Please select a volunteer.',
         isError: true,
@@ -141,40 +223,18 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
       return;
     }
 
-    if (_selectedDeadline == null) {
+    final points =
+        int.tryParse(_pointsController.text.trim());
+
+    if (points == null) {
       _showMessage(
-        'Please select a deadline.',
+        'Please enter a valid points value.',
         isError: true,
       );
       return;
     }
 
-    final now = DateTime.now();
-
-    final deadline = DateTime(
-      _selectedDeadline!.year,
-      _selectedDeadline!.month,
-      _selectedDeadline!.day,
-      23,
-      59,
-      59,
-    );
-
-    if (deadline.isBefore(now)) {
-      _showMessage(
-        'Deadline cannot be in the past.',
-        isError: true,
-      );
-      return;
-    }
-
-    final points = int.tryParse(
-      _pointsController.text.trim(),
-    );
-
-    if (points == null ||
-        points < 0 ||
-        points > 1000) {
+    if (points < 0 || points > 1000) {
       _showMessage(
         'Points must be between 0 and 1000.',
         isError: true,
@@ -182,19 +242,15 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
       return;
     }
 
-    Map<String, dynamic>? selectedVolunteer;
+    final selectedVolunteer =
+        _volunteers.firstWhere(
+      (volunteer) =>
+          volunteer['memberId']?.toString() ==
+          _selectedVolunteerId,
+      orElse: () => <String, dynamic>{},
+    );
 
-    for (final volunteer in _volunteers) {
-      final memberId =
-          volunteer['member_id']?.toString().trim();
-
-      if (memberId == _selectedVolunteerId) {
-        selectedVolunteer = volunteer;
-        break;
-      }
-    }
-
-    if (selectedVolunteer == null) {
+    if (selectedVolunteer.isEmpty) {
       _showMessage(
         'Selected volunteer could not be found.',
         isError: true,
@@ -202,382 +258,348 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
       return;
     }
 
-    final assignedVolunteerName =
-        selectedVolunteer['full_name']?.toString() ??
+    final volunteerName =
+        selectedVolunteer['fullName']?.toString() ??
             'Unknown Volunteer';
 
-    final assignedVolunteerId =
-        selectedVolunteer['member_id']
-                ?.toString()
-                .trim() ??
+    final volunteerMemberId =
+        selectedVolunteer['memberId']?.toString() ??
             '';
 
-    final assignedVolunteerTeam =
-        selectedVolunteer['team']?.toString() ??
-            'Team not assigned';
+    final volunteerTeam =
+        selectedVolunteer['team']?.toString();
 
-    if (assignedVolunteerId.isEmpty) {
-      _showMessage(
-        'Selected volunteer has no valid member ID.',
-        isError: true,
-      );
-      return;
-    }
-
-    final title =
-        _titleController.text.trim();
-
-    final description =
-        _descriptionController.text.trim();
-
-    final assignedByMemberId =
-        AuthService.memberId?.trim() ?? '';
-
-    final assignedByName =
+    final executiveName =
         AuthService.fullName ?? 'Executive';
 
-    if (assignedByMemberId.isEmpty) {
+    if (volunteerMemberId.isEmpty) {
       _showMessage(
-        'Executive account information is missing. Please login again.',
+        'Volunteer member ID is missing.',
         isError: true,
       );
       return;
     }
 
-    debugPrint('');
-    debugPrint(
-      '========================================',
+    // Show confirmation before sending to backend.
+    final confirmed =
+        await _showConfirmationDialog(
+      volunteerName: volunteerName,
+      volunteerMemberId: volunteerMemberId,
+      volunteerTeam: volunteerTeam,
+      title: title,
+      priority: _selectedPriority,
+      deadline: _selectedDeadline,
+      points: points,
+      executiveName: executiveName,
     );
-    debugPrint('📋 STARTING TASK ASSIGNMENT');
-    debugPrint(
-      '👤 Executive: $assignedByName',
-    );
-    debugPrint(
-      '🪪 Executive ID: $assignedByMemberId',
-    );
-    debugPrint(
-      '👤 Volunteer: $assignedVolunteerName',
-    );
-    debugPrint(
-      '🪪 Volunteer ID: $assignedVolunteerId',
-    );
-    debugPrint(
-      '📋 Task: $title',
-    );
-    debugPrint(
-      '========================================',
-    );
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
 
     setState(() {
       _isAssigning = true;
     });
 
     try {
-      // ========================================================
-      // 1. CREATE TASK
-      // ========================================================
-
-      final taskId =
-          await DatabaseService.createTask(
+      final result = await TaskService.createTask(
         title: title,
         description: description,
-        assignedToMemberId:
-            assignedVolunteerId,
-        assignedByMemberId:
-            assignedByMemberId,
-        team: assignedVolunteerTeam,
+        assignedToMemberId: volunteerMemberId,
+        team: volunteerTeam,
         priority: _selectedPriority,
-        deadline:
-            deadline.toIso8601String(),
         points: points,
+        deadline: _selectedDeadline,
       );
 
-      debugPrint(
-        '✅ Task successfully created: $taskId',
-      );
-
-      // ========================================================
-      // 2. CREATE NOTIFICATION
-      // ========================================================
-
-      final notificationId =
-          await DatabaseService.createNotification(
-        recipientMemberId:
-            assignedVolunteerId,
-        title: 'New Task Assigned',
-        message:
-            '$assignedByName assigned you "$title" '
-            'with $points points.',
-        type: 'task_assigned',
-        referenceId: taskId,
-      );
-
-      debugPrint(
-        '✅ Notification successfully created: '
-        '$notificationId',
-      );
-
-      // ========================================================
-      // 3. VERIFY NOTIFICATION
-      // ========================================================
-
-      final notifications =
-          await DatabaseService
-              .getNotificationsForMember(
-        assignedVolunteerId,
-      );
-
-      debugPrint(
-        '🔎 Verification: '
-        '${notifications.length} notification(s) '
-        'found for volunteer '
-        '$assignedVolunteerId',
-      );
-
-      if (notifications.isNotEmpty) {
-        final latest =
-            notifications.first;
-
-        debugPrint(
-          '🔎 Latest notification title: '
-          '${latest['title']}',
-        );
-
-        debugPrint(
-          '🔎 Latest notification recipient: '
-          '${latest['recipient_member_id']}',
-        );
+      if (!mounted) {
+        return;
       }
 
-      debugPrint(
-        '========================================',
-      );
-      debugPrint(
-        '🎉 TASK ASSIGNMENT COMPLETED',
-      );
-      debugPrint(
-        '========================================',
-      );
-      debugPrint('');
+      if (result == null) {
+        setState(() {
+          _isAssigning = false;
+        });
 
-      if (!mounted) return;
+        _showMessage(
+          'Task could not be assigned. Please check your connection and try again.',
+          isError: true,
+        );
+
+        return;
+      }
 
       setState(() {
         _isAssigning = false;
       });
 
-      final shouldClose =
-          await _showAssignmentConfirmation(
-        volunteerName:
-            assignedVolunteerName,
-        memberId:
-            assignedVolunteerId,
+      await _showSuccessDialog(
+        volunteerName: volunteerName,
         taskTitle: title,
-        priority:
-            _selectedPriority,
-        deadline: deadline,
+        priority: _selectedPriority,
+        deadline: _selectedDeadline,
         points: points,
       );
 
-      if (!mounted) return;
-
-      if (shouldClose) {
-        Navigator.pop(
-          context,
-          true,
-        );
+      if (!mounted) {
+        return;
       }
-    } catch (e, stackTrace) {
-      debugPrint('');
-      debugPrint(
-        '❌ ========================================',
-      );
-      debugPrint(
-        '❌ TASK ASSIGNMENT ERROR',
-      );
-      debugPrint(
-        '❌ $e',
-      );
-      debugPrint(
-        '❌ ========================================',
-      );
-      debugPrint(
-        stackTrace.toString(),
-      );
 
-      if (!mounted) return;
+      _titleController.clear();
+      _descriptionController.clear();
+      _pointsController.text = '10';
+
+      setState(() {
+        _selectedVolunteerId = null;
+        _selectedPriority = 'Medium';
+        _selectedDeadline = null;
+      });
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _isAssigning = false;
       });
 
       _showMessage(
-        'Failed to assign task. Please try again.',
+        'Something went wrong while assigning the task.',
         isError: true,
       );
     }
   }
 
-  Future<bool> _showAssignmentConfirmation({
+  // ============================================================
+  // CONFIRMATION DIALOG
+  // ============================================================
+
+  Future<bool?> _showConfirmationDialog({
     required String volunteerName,
-    required String memberId,
-    required String taskTitle,
+    required String volunteerMemberId,
+    required String? volunteerTeam,
+    required String title,
     required String priority,
-    required DateTime deadline,
+    required DateTime? deadline,
     required int points,
-  }) async {
-    final result =
-        await showDialog<bool>(
+    required String executiveName,
+  }) {
+    return showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (context) {
         return AlertDialog(
-          backgroundColor:
-              const Color(0xFF0A2348),
-          shape:
-              RoundedRectangleBorder(
-            borderRadius:
-                BorderRadius.circular(24),
-          ),
-          titlePadding:
-              const EdgeInsets.fromLTRB(
-            24,
-            24,
-            24,
-            10,
-          ),
-          contentPadding:
-              const EdgeInsets.fromLTRB(
-            24,
-            8,
-            24,
-            10,
-          ),
-          actionsPadding:
-              const EdgeInsets.fromLTRB(
-            18,
-            0,
-            18,
-            16,
+          backgroundColor: const Color(0xFF0B2142),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
           ),
           title: const Row(
             children: [
               Icon(
-                Icons.check_circle_rounded,
-                color:
-                    Color(0xFF4D91FF),
-                size: 32,
+                Icons.assignment_turned_in_rounded,
+                color: Color(0xFF4DA3FF),
               ),
               SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'Task Assigned',
+                  'Confirm Task',
                   style: TextStyle(
                     color: Colors.white,
-                    fontWeight:
-                        FontWeight.bold,
-                    fontSize: 21,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
             ],
           ),
-          content: Column(
-            mainAxisSize:
-                MainAxisSize.min,
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'The task has been successfully assigned.',
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildConfirmationRow(
+                  'Volunteer',
+                  volunteerName,
+                ),
+                _buildConfirmationRow(
+                  'Member ID',
+                  volunteerMemberId,
+                ),
+                _buildConfirmationRow(
+                  'Team',
+                  volunteerTeam?.isNotEmpty == true
+                      ? volunteerTeam!
+                      : 'Not assigned',
+                ),
+                _buildConfirmationRow(
+                  'Task',
+                  title,
+                ),
+                _buildConfirmationRow(
+                  'Priority',
+                  priority,
+                ),
+                _buildConfirmationRow(
+                  'Deadline',
+                  _formatDeadline(deadline),
+                ),
+                _buildConfirmationRow(
+                  'Points',
+                  points.toString(),
+                ),
+                _buildConfirmationRow(
+                  'Assigned by',
+                  executiveName,
+                ),
+              ],
+            ),
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(
+            20,
+            0,
+            20,
+            20,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context, false);
+              },
+              child: const Text(
+                'Cancel',
                 style: TextStyle(
+                  color: Colors.white70,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context, true);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1769E0),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text(
+                'Assign Task',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ============================================================
+  // SUCCESS DIALOG
+  // ============================================================
+
+  Future<void> _showSuccessDialog({
+    required String volunteerName,
+    required String taskTitle,
+    required String priority,
+    required DateTime? deadline,
+    required int points,
+  }) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF0B2142),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.green.withOpacity(0.15),
+                ),
+                child: const Icon(
+                  Icons.check_circle_rounded,
+                  size: 56,
+                  color: Colors.greenAccent,
+                ),
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                'Task Assigned!',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '$taskTitle has been assigned to $volunteerName.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
                   color: Colors.white70,
                   fontSize: 14,
                   height: 1.5,
                 ),
               ),
               const SizedBox(height: 20),
-              _buildConfirmationRow(
-                icon:
-                    Icons.person_rounded,
-                label: 'Volunteer',
-                value: volunteerName,
-              ),
-              const SizedBox(height: 12),
-              _buildConfirmationRow(
-                icon:
-                    Icons.badge_outlined,
-                label: 'Member ID',
-                value: memberId,
-              ),
-              const SizedBox(height: 12),
-              _buildConfirmationRow(
-                icon:
-                    Icons.task_alt_rounded,
-                label: 'Task',
-                value: taskTitle,
-              ),
-              const SizedBox(height: 12),
-              _buildConfirmationRow(
-                icon:
-                    Icons.flag_rounded,
-                label: 'Priority',
-                value: priority,
-              ),
-              const SizedBox(height: 12),
-              _buildConfirmationRow(
-                icon:
-                    Icons.calendar_month_rounded,
-                label: 'Deadline',
-                value:
-                    _formatDeadline(
-                  deadline,
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF06152E),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-              ),
-              const SizedBox(height: 12),
-              _buildConfirmationRow(
-                icon:
-                    Icons.stars_rounded,
-                label: 'Points',
-                value:
-                    '$points points',
+                child: Column(
+                  children: [
+                    _buildConfirmationRow(
+                      'Priority',
+                      priority,
+                    ),
+                    _buildConfirmationRow(
+                      'Deadline',
+                      _formatDeadline(deadline),
+                    ),
+                    _buildConfirmationRow(
+                      'Points',
+                      points.toString(),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
           actions: [
             SizedBox(
               width: double.infinity,
-              height: 50,
               child: ElevatedButton(
                 onPressed: () {
-                  Navigator.pop(
-                    context,
-                    true,
-                  );
+                  Navigator.pop(context);
                 },
-                style:
-                    ElevatedButton.styleFrom(
-                  backgroundColor:
-                      const Color(
-                    0xFF0D5BD7,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1769E0),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 14,
                   ),
-                  foregroundColor:
-                      Colors.white,
-                  elevation: 0,
-                  shape:
-                      RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.circular(
-                      15,
-                    ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
                 child: const Text(
-                  'DONE',
+                  'Done',
                   style: TextStyle(
-                    fontWeight:
-                        FontWeight.bold,
-                    letterSpacing: 1,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
@@ -586,497 +608,202 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
         );
       },
     );
-
-    return result ?? false;
   }
 
-  Widget _buildConfirmationRow({
-    required IconData icon,
-    required String label,
-    required String value,
-  }) {
-    return Row(
-      crossAxisAlignment:
-          CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 34,
-          height: 34,
-          decoration:
-              BoxDecoration(
-            color:
-                const Color(0xFF0D5BD7)
-                    .withOpacity(0.16),
-            borderRadius:
-                BorderRadius.circular(10),
-          ),
-          child: Icon(
-            icon,
-            color:
-                const Color(0xFF4D91FF),
-            size: 18,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style:
-                    const TextStyle(
-                  color: Colors.white38,
-                  fontSize: 11,
-                  fontWeight:
-                      FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                value,
-                maxLines: 2,
-                overflow:
-                    TextOverflow.ellipsis,
-                style:
-                    const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight:
-                      FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
+  // ============================================================
+  // MESSAGE
+  // ============================================================
 
   void _showMessage(
     String message, {
     bool isError = false,
   }) {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     ScaffoldMessenger.of(context)
-        .showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError
-            ? const Color(0xFFB3261E)
-            : const Color(0xFF0D5BD7),
-        behavior:
-            SnackBarBehavior.floating,
-        shape:
-            RoundedRectangleBorder(
-          borderRadius:
-              BorderRadius.circular(12),
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                isError
+                    ? Icons.error_outline_rounded
+                    : Icons.check_circle_outline_rounded,
+                color: Colors.white,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(message),
+              ),
+            ],
+          ),
+          backgroundColor:
+              isError
+                  ? const Color(0xFFB42318)
+                  : const Color(0xFF16794A),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
+      );
+  }
+
+  // ============================================================
+  // FORMAT DEADLINE
+  // ============================================================
+
+  String _formatDeadline(DateTime? dateTime) {
+    if (dateTime == null) {
+      return 'No deadline';
+    }
+
+    final day =
+        dateTime.day.toString().padLeft(2, '0');
+
+    final month =
+        dateTime.month.toString().padLeft(2, '0');
+
+    final year =
+        dateTime.year.toString();
+
+    final hour =
+        dateTime.hour.toString().padLeft(2, '0');
+
+    final minute =
+        dateTime.minute.toString().padLeft(2, '0');
+
+    return '$day/$month/$year  $hour:$minute';
+  }
+
+  // ============================================================
+  // CONFIRMATION ROW
+  // ============================================================
+
+  Widget _buildConfirmationRow(
+    String label,
+    String value,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(
+        bottom: 10,
+      ),
+      child: Row(
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 90,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white54,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  String _formatDeadline(
-    DateTime date,
-  ) {
-    const months = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
-    ];
-
-    return '${months[date.month - 1]} '
-        '${date.day}, '
-        '${date.year}';
-  }
+  // ============================================================
+  // INPUT DECORATION
+  // ============================================================
 
   InputDecoration _inputDecoration({
-    required String label,
+    required String hint,
     required IconData icon,
-    String? hint,
   }) {
     return InputDecoration(
-      labelText: label,
       hintText: hint,
-      labelStyle:
-          const TextStyle(
-        color: Colors.white70,
-      ),
-      hintStyle:
-          const TextStyle(
-        color: Colors.white30,
+      hintStyle: const TextStyle(
+        color: Colors.white38,
       ),
       prefixIcon: Icon(
         icon,
-        color:
-            const Color(0xFF4D91FF),
+        color: Colors.white54,
       ),
       filled: true,
-      fillColor:
-          const Color(0xFF0A2348),
-      enabledBorder:
-          OutlineInputBorder(
-        borderRadius:
-            BorderRadius.circular(16),
-        borderSide:
-            const BorderSide(
+      fillColor: const Color(0xFF0A1E3A),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(
           color: Colors.white10,
         ),
       ),
-      focusedBorder:
-          OutlineInputBorder(
-        borderRadius:
-            BorderRadius.circular(16),
-        borderSide:
-            const BorderSide(
-          color: Color(0xFF3D8BFF),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(
+          color: Color(0xFF2F80ED),
           width: 1.5,
         ),
       ),
-      errorBorder:
-          OutlineInputBorder(
-        borderRadius:
-            BorderRadius.circular(16),
-        borderSide:
-            const BorderSide(
-          color: Color(0xFFB3261E),
-        ),
-      ),
-      focusedErrorBorder:
-          OutlineInputBorder(
-        borderRadius:
-            BorderRadius.circular(16),
-        borderSide:
-            const BorderSide(
-          color: Color(0xFFB3261E),
-        ),
-      ),
-      contentPadding:
-          const EdgeInsets.symmetric(
-        horizontal: 18,
-        vertical: 18,
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: 16,
       ),
     );
   }
 
-  @override
-  Widget build(
-    BuildContext context,
-  ) {
-    return Scaffold(
-      backgroundColor:
-          const Color(0xFF041329),
-      appBar: AppBar(
-        backgroundColor:
-            const Color(0xFF041329),
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_rounded,
-            color: Colors.white,
-          ),
-          onPressed: () {
-            Navigator.pop(context);
-          },
-        ),
-        title: const Text(
-          'Assign Task',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight:
-                FontWeight.w700,
-          ),
-        ),
-      ),
-      body: SafeArea(
-        child: _isLoading
-            ? const Center(
-                child:
-                    CircularProgressIndicator(
-                  color:
-                      Color(0xFF3D8BFF),
-                ),
-              )
-            : _volunteers.isEmpty
-                ? _buildNoVolunteers()
-                : SingleChildScrollView(
-                    padding:
-                        const EdgeInsets
-                            .fromLTRB(
-                      20,
-                      10,
-                      20,
-                      30,
-                    ),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment
-                                .start,
-                        children: [
-                          _buildHeader(),
-
-                          const SizedBox(
-                            height: 25,
-                          ),
-
-                          _buildSectionTitle(
-                            'ASSIGN TO',
-                          ),
-
-                          const SizedBox(
-                            height: 10,
-                          ),
-
-                          _buildVolunteerDropdown(),
-
-                          const SizedBox(
-                            height: 25,
-                          ),
-
-                          _buildSectionTitle(
-                            'TASK DETAILS',
-                          ),
-
-                          const SizedBox(
-                            height: 10,
-                          ),
-
-                          TextFormField(
-                            controller:
-                                _titleController,
-                            style:
-                                const TextStyle(
-                              color:
-                                  Colors.white,
-                            ),
-                            textCapitalization:
-                                TextCapitalization
-                                    .sentences,
-                            decoration:
-                                _inputDecoration(
-                              label:
-                                  'Task Title',
-                              icon: Icons
-                                  .task_alt_rounded,
-                              hint:
-                                  'e.g. Prepare event registration desk',
-                            ),
-                            validator:
-                                (value) {
-                              final text =
-                                  value?.trim() ??
-                                      '';
-
-                              if (text.isEmpty) {
-                                return 'Please enter a task title';
-                              }
-
-                              if (text.length <
-                                  3) {
-                                return 'Task title is too short';
-                              }
-
-                              if (text.length >
-                                  100) {
-                                return 'Task title is too long';
-                              }
-
-                              return null;
-                            },
-                          ),
-
-                          const SizedBox(
-                            height: 16,
-                          ),
-
-                          TextFormField(
-                            controller:
-                                _descriptionController,
-                            maxLines: 5,
-                            minLines: 4,
-                            style:
-                                const TextStyle(
-                              color:
-                                  Colors.white,
-                              height: 1.4,
-                            ),
-                            textCapitalization:
-                                TextCapitalization
-                                    .sentences,
-                            decoration:
-                                _inputDecoration(
-                              label:
-                                  'Description',
-                              icon: Icons
-                                  .description_outlined,
-                              hint:
-                                  'Explain what the volunteer needs to do...',
-                            ),
-                            validator:
-                                (value) {
-                              final text =
-                                  value?.trim() ??
-                                      '';
-
-                              if (text.isEmpty) {
-                                return 'Please enter a description';
-                              }
-
-                              if (text.length <
-                                  10) {
-                                return 'Please provide a little more detail';
-                              }
-
-                              if (text.length >
-                                  1000) {
-                                return 'Description is too long';
-                              }
-
-                              return null;
-                            },
-                          ),
-
-                          const SizedBox(
-                            height: 25,
-                          ),
-
-                          _buildSectionTitle(
-                            'TASK SETTINGS',
-                          ),
-
-                          const SizedBox(
-                            height: 10,
-                          ),
-
-                          _buildPrioritySelector(),
-
-                          const SizedBox(
-                            height: 16,
-                          ),
-
-                          _buildDeadlinePicker(),
-
-                          const SizedBox(
-                            height: 16,
-                          ),
-
-                          TextFormField(
-                            controller:
-                                _pointsController,
-                            keyboardType:
-                                TextInputType
-                                    .number,
-                            style:
-                                const TextStyle(
-                              color:
-                                  Colors.white,
-                            ),
-                            decoration:
-                                _inputDecoration(
-                              label:
-                                  'Points',
-                              icon: Icons
-                                  .stars_rounded,
-                              hint:
-                                  'e.g. 20',
-                            ),
-                            validator:
-                                (value) {
-                              final text =
-                                  value?.trim() ??
-                                      '';
-
-                              if (text.isEmpty) {
-                                return 'Please enter points';
-                              }
-
-                              final points =
-                                  int.tryParse(
-                                text,
-                              );
-
-                              if (points ==
-                                  null) {
-                                return 'Enter a valid whole number';
-                              }
-
-                              if (points < 0) {
-                                return 'Points cannot be negative';
-                              }
-
-                              if (points >
-                                  1000) {
-                                return 'Points cannot exceed 1000';
-                              }
-
-                              return null;
-                            },
-                          ),
-
-                          const SizedBox(
-                            height: 30,
-                          ),
-
-                          _buildAssignButton(),
-                        ],
-                      ),
-                    ),
-                  ),
-      ),
-    );
-  }
+  // ============================================================
+  // HEADER
+  // ============================================================
 
   Widget _buildHeader() {
     return Container(
       width: double.infinity,
-      padding:
-          const EdgeInsets.all(22),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        borderRadius:
-            BorderRadius.circular(22),
-        gradient:
-            const LinearGradient(
+        gradient: const LinearGradient(
           colors: [
-            Color(0xFF0D5BD7),
-            Color(0xFF092E70),
+            Color(0xFF0C3A82),
+            Color(0xFF0A2859),
           ],
-          begin:
-              Alignment.topLeft,
-          end:
-              Alignment.bottomRight,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        boxShadow: [
-          BoxShadow(
-            color:
-                const Color(0xFF0D5BD7)
-                    .withOpacity(0.25),
-            blurRadius: 25,
-            spreadRadius: 1,
-          ),
-        ],
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: Colors.white10,
+        ),
       ),
-      child: const Row(
+      child: Row(
         children: [
-          Icon(
-            Icons.assignment_rounded,
-            color: Colors.white,
-            size: 38,
+          Container(
+            width: 58,
+            height: 58,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.10),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(
+              Icons.assignment_add,
+              color: Color(0xFF63B3FF),
+              size: 30,
+            ),
           ),
-          SizedBox(width: 16),
-          Expanded(
+          const SizedBox(width: 16),
+          const Expanded(
             child: Column(
               crossAxisAlignment:
                   CrossAxisAlignment.start,
@@ -1085,18 +812,16 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
                   'Create New Task',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 20,
-                    fontWeight:
-                        FontWeight.w800,
+                    fontSize: 21,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
                 SizedBox(height: 5),
                 Text(
-                  'Assign work to a volunteer and track their progress.',
+                  'Assign work to a volunteer and track progress.',
                   style: TextStyle(
-                    color:
-                        Colors.white70,
-                    fontSize: 13,
+                    color: Colors.white60,
+                    fontSize: 12,
                     height: 1.4,
                   ),
                 ),
@@ -1108,408 +833,338 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
     );
   }
 
+  // ============================================================
+  // SECTION TITLE
+  // ============================================================
+
   Widget _buildSectionTitle(
     String title,
+    IconData icon,
   ) {
-    return Text(
-      title,
-      style: const TextStyle(
-        color:
-            Color(0xFF6EA6FF),
-        fontSize: 12,
-        fontWeight:
-            FontWeight.w800,
-        letterSpacing: 1.4,
-      ),
+    return Row(
+      children: [
+        Icon(
+          icon,
+          color: const Color(0xFF4DA3FF),
+          size: 19,
+        ),
+        const SizedBox(width: 9),
+        Text(
+          title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
     );
   }
+
+  // ============================================================
+  // VOLUNTEER DROPDOWN
+  // ============================================================
 
   Widget _buildVolunteerDropdown() {
-    final validSelectedId =
-        _volunteers.any(
-              (volunteer) =>
-                  volunteer['member_id']
-                      ?.toString()
-                      .trim() ==
-                  _selectedVolunteerId,
-            )
-            ? _selectedVolunteerId
-            : null;
-
-    if (validSelectedId !=
-        _selectedVolunteerId) {
-      WidgetsBinding.instance
-          .addPostFrameCallback(
-        (_) {
-          if (!mounted) return;
-
-          setState(() {
-            _selectedVolunteerId =
-                validSelectedId;
-          });
-        },
-      );
-    }
-
-    return Container(
-      padding:
-          const EdgeInsets.symmetric(
-        horizontal: 16,
-        vertical: 4,
-      ),
-      decoration:
-          BoxDecoration(
-        color:
-            const Color(0xFF0A2348),
-        borderRadius:
-            BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white10,
-        ),
-      ),
-      child:
-          DropdownButtonHideUnderline(
-        child:
-            DropdownButton<String>(
-          value: validSelectedId,
-          isExpanded: true,
-          dropdownColor:
-              const Color(0xFF0A2348),
-          icon: const Icon(
-            Icons
-                .keyboard_arrow_down_rounded,
-            color:
-                Color(0xFF4D91FF),
-          ),
-          hint: const Row(
-            children: [
-              Icon(
-                Icons
-                    .person_outline_rounded,
-                color:
-                    Color(0xFF4D91FF),
-              ),
-              SizedBox(width: 12),
-              Text(
-                'Select a volunteer',
-                style: TextStyle(
-                  color:
-                      Colors.white60,
-                ),
-              ),
-            ],
-          ),
-          items: _volunteers
-              .map(
-                (volunteer) {
-                  final fullName =
-                      volunteer[
-                                  'full_name']
-                              ?.toString() ??
-                          'Unknown Volunteer';
-
-                  final memberId =
-                      volunteer[
-                                  'member_id']
-                              ?.toString()
-                              .trim() ??
-                          '';
-
-                  final team =
-                      volunteer[
-                                  'team']
-                              ?.toString() ??
-                          'Team not assigned';
-
-                  return DropdownMenuItem<
-                      String>(
-                    value: memberId,
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration:
-                              BoxDecoration(
-                            shape:
-                                BoxShape
-                                    .circle,
-                            color:
-                                const Color(
-                              0xFF0D5BD7,
-                            ).withOpacity(
-                              0.2,
-                            ),
-                          ),
-                          child:
-                              const Icon(
-                            Icons
-                                .person_rounded,
-                            color:
-                                Color(
-                              0xFF4D91FF,
-                            ),
-                            size: 21,
-                          ),
-                        ),
-                        const SizedBox(
-                          width: 12,
-                        ),
-                        Expanded(
-                          child:
-                              Column(
-                            mainAxisAlignment:
-                                MainAxisAlignment
-                                    .center,
-                            crossAxisAlignment:
-                                CrossAxisAlignment
-                                    .start,
-                            children: [
-                              Text(
-                                fullName,
-                                overflow:
-                                    TextOverflow
-                                        .ellipsis,
-                                style:
-                                    const TextStyle(
-                                  color:
-                                      Colors
-                                          .white,
-                                  fontWeight:
-                                      FontWeight
-                                          .w600,
-                                ),
-                              ),
-                              const SizedBox(
-                                height: 2,
-                              ),
-                              Text(
-                                '$memberId • $team',
-                                overflow:
-                                    TextOverflow
-                                        .ellipsis,
-                                style:
-                                    const TextStyle(
-                                  color:
-                                      Colors
-                                          .white54,
-                                  fontSize:
-                                      11,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              )
-              .toList(),
-          onChanged: (value) {
-            if (value == null) return;
-
-            setState(() {
-              _selectedVolunteerId =
-                  value.trim();
-            });
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPrioritySelector() {
-    return Container(
-      padding:
-          const EdgeInsets.symmetric(
-        horizontal: 16,
-        vertical: 4,
-      ),
-      decoration:
-          BoxDecoration(
-        color:
-            const Color(0xFF0A2348),
-        borderRadius:
-            BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white10,
-        ),
-      ),
-      child:
-          DropdownButtonHideUnderline(
-        child:
-            DropdownButton<String>(
-          value: _selectedPriority,
-          isExpanded: true,
-          dropdownColor:
-              const Color(0xFF0A2348),
-          icon: const Icon(
-            Icons
-                .keyboard_arrow_down_rounded,
-            color:
-                Color(0xFF4D91FF),
-          ),
-          items: _priorities
-              .map(
-                (priority) {
-                  IconData icon;
-
-                  if (priority ==
-                      'High') {
-                    icon =
-                        Icons
-                            .priority_high_rounded;
-                  } else if (priority ==
-                      'Medium') {
-                    icon =
-                        Icons.remove_rounded;
-                  } else {
-                    icon =
-                        Icons
-                            .arrow_downward_rounded;
-                  }
-
-                  return DropdownMenuItem<
-                      String>(
-                    value: priority,
-                    child: Row(
-                      children: [
-                        Icon(
-                          icon,
-                          color:
-                              const Color(
-                            0xFF4D91FF,
-                          ),
-                        ),
-                        const SizedBox(
-                          width: 12,
-                        ),
-                        Text(
-                          priority,
-                          style:
-                              const TextStyle(
-                            color:
-                                Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              )
-              .toList(),
-          onChanged: (value) {
-            if (value == null) return;
-
-            setState(() {
-              _selectedPriority =
-                  value;
-            });
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDeadlinePicker() {
-    final hasDeadline =
-        _selectedDeadline != null;
-
-    return InkWell(
-      borderRadius:
-          BorderRadius.circular(16),
-      onTap: _selectDeadline,
-      child: Container(
-        width: double.infinity,
-        padding:
-            const EdgeInsets.symmetric(
+    if (_isLoading) {
+      return Container(
+        padding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 18,
         ),
-        decoration:
-            BoxDecoration(
-          color:
-              const Color(0xFF0A2348),
-          borderRadius:
-              BorderRadius.circular(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0A1E3A),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: hasDeadline
-                ? const Color(
-                    0xFF3D8BFF,
-                  ).withOpacity(0.45)
-                : Colors.white10,
+            color: Colors.white10,
+          ),
+        ),
+        child: const Row(
+          children: [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Color(0xFF4DA3FF),
+              ),
+            ),
+            SizedBox(width: 12),
+            Text(
+              'Loading volunteers...',
+              style: TextStyle(
+                color: Colors.white54,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_volunteers.isEmpty) {
+      return _buildNoVolunteers();
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A1E3A),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: Colors.white10,
+        ),
+      ),
+      child: DropdownButtonFormField<String>(
+        value: _selectedVolunteerId,
+        dropdownColor: const Color(0xFF0B2142),
+        icon: const Icon(
+          Icons.keyboard_arrow_down_rounded,
+          color: Colors.white54,
+        ),
+        decoration: const InputDecoration(
+          prefixIcon: Icon(
+            Icons.person_outline_rounded,
+            color: Colors.white54,
+          ),
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 6,
+          ),
+        ),
+        hint: const Text(
+          'Select a volunteer',
+          style: TextStyle(
+            color: Colors.white38,
+          ),
+        ),
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+        ),
+        items: _volunteers.map((volunteer) {
+          final memberId =
+              volunteer['memberId']?.toString() ?? '';
+
+          final fullName =
+              volunteer['fullName']?.toString() ??
+                  'Unknown Volunteer';
+
+          final team =
+              volunteer['team']?.toString();
+
+          return DropdownMenuItem<String>(
+            value: memberId,
+            child: Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1769E0)
+                        .withOpacity(0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.person_rounded,
+                    color: Color(0xFF4DA3FF),
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Column(
+                    mainAxisAlignment:
+                        MainAxisAlignment.center,
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        fullName,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        team != null &&
+                                team.isNotEmpty
+                            ? '$memberId • $team'
+                            : memberId,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white38,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+        onChanged: (value) {
+          setState(() {
+            _selectedVolunteerId = value;
+          });
+        },
+      ),
+    );
+  }
+
+  // ============================================================
+  // PRIORITY SELECTOR
+  // ============================================================
+
+  Widget _buildPrioritySelector() {
+    return Row(
+      children: _priorities.map((priority) {
+        final selected =
+            _selectedPriority == priority;
+
+        return Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(
+              right:
+                  priority == _priorities.last
+                      ? 0
+                      : 8,
+            ),
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _selectedPriority = priority;
+                });
+              },
+              child: AnimatedContainer(
+                duration:
+                    const Duration(milliseconds: 180),
+                padding:
+                    const EdgeInsets.symmetric(
+                  vertical: 13,
+                ),
+                decoration: BoxDecoration(
+                  color:
+                      selected
+                          ? const Color(0xFF1769E0)
+                          : const Color(0xFF0A1E3A),
+                  borderRadius:
+                      BorderRadius.circular(12),
+                  border: Border.all(
+                    color:
+                        selected
+                            ? const Color(0xFF4DA3FF)
+                            : Colors.white10,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      priority == 'High'
+                          ? Icons.priority_high_rounded
+                          : priority == 'Medium'
+                              ? Icons.remove_rounded
+                              : Icons.keyboard_arrow_down_rounded,
+                      color:
+                          selected
+                              ? Colors.white
+                              : Colors.white54,
+                      size: 19,
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      priority,
+                      style: TextStyle(
+                        color:
+                            selected
+                                ? Colors.white
+                                : Colors.white60,
+                        fontSize: 11,
+                        fontWeight:
+                            selected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  // ============================================================
+  // DEADLINE PICKER
+  // ============================================================
+
+  Widget _buildDeadlinePicker() {
+    return GestureDetector(
+      onTap: _selectDeadline,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0A1E3A),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: Colors.white10,
           ),
         ),
         child: Row(
           children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration:
-                  BoxDecoration(
-                color:
-                    const Color(
-                  0xFF0D5BD7,
-                ).withOpacity(0.16),
-                borderRadius:
-                    BorderRadius.circular(
-                  12,
-                ),
-              ),
-              child: const Icon(
-                Icons
-                    .calendar_month_rounded,
-                color:
-                    Color(0xFF4D91FF),
-              ),
+            const Icon(
+              Icons.calendar_month_rounded,
+              color: Color(0xFF4DA3FF),
+              size: 21,
             ),
-            const SizedBox(
-              width: 14,
-            ),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment:
-                    CrossAxisAlignment
-                        .start,
+                    CrossAxisAlignment.start,
                 children: [
                   const Text(
                     'Deadline',
-                    style:
-                        TextStyle(
-                      color:
-                          Colors.white54,
-                      fontSize: 12,
+                    style: TextStyle(
+                      color: Colors.white54,
+                      fontSize: 10,
                     ),
                   ),
-                  const SizedBox(
-                    height: 4,
-                  ),
+                  const SizedBox(height: 4),
                   Text(
-                    hasDeadline
-                        ? _formatDeadline(
-                            _selectedDeadline!,
-                          )
-                        : 'Select deadline',
+                    _selectedDeadline == null
+                        ? 'Select deadline'
+                        : _formatDeadline(
+                            _selectedDeadline,
+                          ),
                     style: TextStyle(
-                      color: hasDeadline
-                          ? Colors.white
-                          : Colors.white54,
-                      fontSize: 15,
-                      fontWeight: hasDeadline
-                          ? FontWeight.w600
-                          : FontWeight.normal,
+                      color:
+                          _selectedDeadline == null
+                              ? Colors.white38
+                              : Colors.white,
+                      fontSize: 13,
+                      fontWeight:
+                          _selectedDeadline == null
+                              ? FontWeight.normal
+                              : FontWeight.w600,
                     ),
                   ),
                 ],
               ),
             ),
             const Icon(
-              Icons
-                  .arrow_forward_ios_rounded,
-              color:
-                  Colors.white30,
-              size: 16,
+              Icons.arrow_forward_ios_rounded,
+              color: Colors.white30,
+              size: 14,
             ),
           ],
         ),
@@ -1517,131 +1172,272 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
     );
   }
 
+  // ============================================================
+  // ASSIGN BUTTON
+  // ============================================================
+
   Widget _buildAssignButton() {
     return SizedBox(
       width: double.infinity,
-      height: 58,
+      height: 54,
       child: ElevatedButton(
         onPressed:
             _isAssigning
                 ? null
                 : _assignTask,
-        style:
-            ElevatedButton.styleFrom(
-          backgroundColor:
-              const Color(0xFF0D5BD7),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF1769E0),
           disabledBackgroundColor:
-              const Color(
-            0xFF0D5BD7,
-          ).withOpacity(0.45),
-          foregroundColor:
-              Colors.white,
+              const Color(0xFF1769E0)
+                  .withOpacity(0.45),
+          foregroundColor: Colors.white,
           elevation: 0,
-          shape:
-              RoundedRectangleBorder(
-            borderRadius:
-                BorderRadius.circular(
-              17,
-            ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
           ),
         ),
-        child: _isAssigning
-            ? const SizedBox(
-                width: 25,
-                height: 25,
-                child:
-                    CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  color:
-                      Colors.white,
-                ),
-              )
-            : const Row(
-                mainAxisAlignment:
-                    MainAxisAlignment
-                        .center,
-                children: [
-                  Icon(
-                    Icons
-                        .send_rounded,
-                    size: 21,
-                  ),
-                  SizedBox(width: 10),
-                  Text(
-                    'ASSIGN TASK',
-                    style:
-                        TextStyle(
-                      fontSize: 15,
-                      fontWeight:
-                          FontWeight.bold,
-                      letterSpacing: 1,
+        child:
+            _isAssigning
+                ? const SizedBox(
+                    width: 23,
+                    height: 23,
+                    child:
+                        CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Colors.white,
                     ),
+                  )
+                : const Row(
+                    mainAxisAlignment:
+                        MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.send_rounded,
+                        size: 20,
+                      ),
+                      SizedBox(width: 9),
+                      Text(
+                        'Assign Task',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
       ),
     );
   }
 
+  // ============================================================
+  // NO VOLUNTEERS
+  // ============================================================
+
   Widget _buildNoVolunteers() {
-    return Center(
-      child: Padding(
-        padding:
-            const EdgeInsets.all(30),
-        child: Column(
-          mainAxisAlignment:
-              MainAxisAlignment
-                  .center,
-          children: [
-            Container(
-              width: 90,
-              height: 90,
-              decoration:
-                  BoxDecoration(
-                shape:
-                    BoxShape.circle,
-                color:
-                    const Color(
-                  0xFF0D5BD7,
-                ).withOpacity(0.15),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A1E3A),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: Colors.white10,
+        ),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.people_outline_rounded,
+            color: Colors.white30,
+            size: 38,
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'No Volunteers Found',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 5),
+          const Text(
+            'There are no active volunteer accounts available.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white54,
+              fontSize: 12,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 14),
+          OutlinedButton.icon(
+            onPressed: _loadVolunteers,
+            icon: const Icon(
+              Icons.refresh_rounded,
+              size: 17,
+            ),
+            label: const Text('Refresh'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor:
+                  const Color(0xFF4DA3FF),
+              side: const BorderSide(
+                color: Color(0xFF1769E0),
               ),
-              child: const Icon(
-                Icons
-                    .group_off_rounded,
-                color:
-                    Color(0xFF4D91FF),
-                size: 45,
-              ),
-            ),
-            const SizedBox(
-              height: 25,
-            ),
-            const Text(
-              'No Volunteers Found',
-              textAlign:
-                  TextAlign.center,
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 22,
-                fontWeight:
-                    FontWeight.bold,
-              ),
-            ),
-            const SizedBox(
-              height: 10,
-            ),
-            const Text(
-              'Register at least one Volunteer account before assigning a task.',
-              textAlign:
-                  TextAlign.center,
-              style: TextStyle(
-                color:
-                    Colors.white54,
-                fontSize: 14,
-                height: 1.5,
+              shape: RoundedRectangleBorder(
+                borderRadius:
+                    BorderRadius.circular(10),
               ),
             ),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // BUILD
+  // ============================================================
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF06152E),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF06152E),
+        elevation: 0,
+        centerTitle: false,
+        title: const Text(
+          'Assign Task',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        iconTheme: const IconThemeData(
+          color: Colors.white,
+        ),
+      ),
+      body: SafeArea(
+        child: RefreshIndicator(
+          color: const Color(0xFF4DA3FF),
+          backgroundColor: const Color(0xFF0B2142),
+          onRefresh: _loadVolunteers,
+          child: SingleChildScrollView(
+            physics:
+                const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(
+              18,
+              8,
+              18,
+              32,
+            ),
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                _buildHeader(),
+
+                const SizedBox(height: 28),
+
+                _buildSectionTitle(
+                  'ASSIGN TO',
+                  Icons.people_alt_outlined,
+                ),
+
+                const SizedBox(height: 11),
+
+                _buildVolunteerDropdown(),
+
+                const SizedBox(height: 28),
+
+                _buildSectionTitle(
+                  'TASK DETAILS',
+                  Icons.description_outlined,
+                ),
+
+                const SizedBox(height: 11),
+
+                TextField(
+                  controller: _titleController,
+                  style: const TextStyle(
+                    color: Colors.white,
+                  ),
+                  textInputAction:
+                      TextInputAction.next,
+                  decoration: _inputDecoration(
+                    hint: 'Task title',
+                    icon: Icons.title_rounded,
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                TextField(
+                  controller:
+                      _descriptionController,
+                  style: const TextStyle(
+                    color: Colors.white,
+                  ),
+                  minLines: 4,
+                  maxLines: 7,
+                  textInputAction:
+                      TextInputAction.newline,
+                  decoration: _inputDecoration(
+                    hint: 'Describe what needs to be done...',
+                    icon:
+                        Icons.notes_rounded,
+                  ),
+                ),
+
+                const SizedBox(height: 28),
+
+                _buildSectionTitle(
+                  'TASK SETTINGS',
+                  Icons.tune_rounded,
+                ),
+
+                const SizedBox(height: 11),
+
+                const Text(
+                  'Priority',
+                  style: TextStyle(
+                    color: Colors.white54,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+
+                const SizedBox(height: 8),
+
+                _buildPrioritySelector(),
+
+                const SizedBox(height: 16),
+
+                _buildDeadlinePicker(),
+
+                const SizedBox(height: 12),
+
+                TextField(
+                  controller: _pointsController,
+                  style: const TextStyle(
+                    color: Colors.white,
+                  ),
+                  keyboardType:
+                      TextInputType.number,
+                  decoration: _inputDecoration(
+                    hint: 'Points (0 - 1000)',
+                    icon:
+                        Icons.stars_rounded,
+                  ),
+                ),
+
+                const SizedBox(height: 30),
+
+                _buildAssignButton(),
+              ],
+            ),
+          ),
         ),
       ),
     );

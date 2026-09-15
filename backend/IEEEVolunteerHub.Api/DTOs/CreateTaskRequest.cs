@@ -8,5 +8,11 @@ public class CreateTaskRequest
 
     public string AssignedToMemberId { get; set; } = string.Empty;
 
+    public string? Team { get; set; }
+
+    public string Priority { get; set; } = "Medium";
+
+    public int Points { get; set; } = 0;
+
     public DateTime? DueDate { get; set; }
 }
