@@ -280,7 +280,6 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
       return;
     }
 
-    // Show confirmation before sending to backend.
     final confirmed =
         await _showConfirmationDialog(
       volunteerName: volunteerName,
@@ -906,6 +905,7 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
     }
 
     return Container(
+      width: double.infinity,
       decoration: BoxDecoration(
         color: const Color(0xFF0A1E3A),
         borderRadius: BorderRadius.circular(14),
@@ -915,6 +915,7 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
       ),
       child: DropdownButtonFormField<String>(
         value: _selectedVolunteerId,
+        isExpanded: true,
         dropdownColor: const Color(0xFF0B2142),
         icon: const Icon(
           Icons.keyboard_arrow_down_rounded,
@@ -955,6 +956,7 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
           return DropdownMenuItem<String>(
             value: memberId,
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
                   width: 34,
@@ -972,7 +974,9 @@ class _AssignTaskScreenState extends State<AssignTaskScreen> {
                 ),
                 const SizedBox(width: 10),
                 Flexible(
+                  fit: FlexFit.loose,
                   child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment:
                         MainAxisAlignment.center,
                     crossAxisAlignment:

@@ -8,6 +8,18 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Explicitly load application configuration.
+builder.Configuration
+.SetBasePath(builder.Environment.ContentRootPath)
+.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+.AddJsonFile(
+$"appsettings.{builder.Environment.EnvironmentName}.json",
+optional: true,
+reloadOnChange: true
+)
+.AddEnvironmentVariables();
+
+// Controllers
 builder.Services.AddControllers();
 
 // PostgreSQL
@@ -20,14 +32,14 @@ builder.Configuration.GetConnectionString("DefaultConnection")
 // Password service
 builder.Services.AddScoped<PasswordService>();
 
-// JWT Authentication
-var jwtKey = builder.Configuration["Jwt"]
+// JWT configuration
+var jwtKey = builder.Configuration["Jwt:Key"]
 ?? throw new InvalidOperationException("JWT key is missing.");
 
-var jwtIssuer = builder.Configuration["Jwt"]
+var jwtIssuer = builder.Configuration["Jwt:Issuer"]
 ?? throw new InvalidOperationException("JWT issuer is missing.");
 
-var jwtAudience = builder.Configuration["Jwt"]
+var jwtAudience = builder.Configuration["Jwt:Audience"]
 ?? throw new InvalidOperationException("JWT audience is missing.");
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -40,6 +52,7 @@ IssuerSigningKey = new SymmetricSecurityKey(
 Encoding.UTF8.GetBytes(jwtKey)
 ),
 
+
         ValidateIssuer = true,
         ValidIssuer = jwtIssuer,
 
@@ -51,6 +64,7 @@ Encoding.UTF8.GetBytes(jwtKey)
         ClockSkew = TimeSpan.Zero
     };
 });
+
 
 builder.Services.AddAuthorization();
 
@@ -80,7 +94,7 @@ Version = "v1"
 }
 );
 
-// JWT Bearer authentication
+
 options.AddSecurityDefinition(
     "Bearer",
     new OpenApiSecurityScheme
@@ -90,8 +104,7 @@ options.AddSecurityDefinition(
         Scheme = "bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
-        Description =
-            "Enter your JWT token. Example: Bearer {your-token}"
+        Description = "Enter your JWT token."
     }
 );
 
@@ -111,6 +124,7 @@ options.AddSecurityRequirement(
         }
     }
 );
+
 
 });
 
