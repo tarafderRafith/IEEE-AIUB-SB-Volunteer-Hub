@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../services/auth_service.dart';
 import '../services/task_service.dart';
 
 class VolunteerTasksScreen extends StatefulWidget {
@@ -46,9 +45,12 @@ class _VolunteerTasksScreenState extends State<VolunteerTasksScreen> {
         _isLoading = false;
       });
     } catch (e) {
+      debugPrint('❌ Failed to load volunteer tasks: $e');
+
       if (!mounted) return;
 
       setState(() {
+        tasks = [];
         _isLoading = false;
       });
 
@@ -455,37 +457,43 @@ class _VolunteerTasksScreenState extends State<VolunteerTasksScreen> {
         });
 
         try {
-  await TaskService.updateTaskStatus(
-    taskId: taskId,
-    status: status,
-  );
+          await TaskService.updateTaskStatus(
+            taskId: taskId,
+            status: status,
+          );
 
-  if (!mounted) return;
+          if (!mounted) return;
 
-  await _loadTasks();
+          await _loadTasks();
 
-  if (!mounted) return;
+          if (!mounted) return;
 
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text(
-        'Task status updated to $status.',
-      ),
-      backgroundColor: const Color(0xFF0D5BD7),
-    ),
-  );
-} catch (e) {
-  if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Task status updated to $status.',
+              ),
+              backgroundColor:
+                  const Color(0xFF0D5BD7),
+            ),
+          );
+        } catch (e) {
+          debugPrint(
+            '❌ Failed to update task status: $e',
+          );
 
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(
-      content: Text(
-        'Failed to update task status.',
-      ),
-      backgroundColor: Color(0xFFB3261E),
-    ),
-  );
-}
+          if (!mounted) return;
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Failed to update task status.',
+              ),
+              backgroundColor:
+                  Color(0xFFB3261E),
+            ),
+          );
+        }
 
         if (!mounted) return;
 
@@ -892,10 +900,6 @@ class _VolunteerTasksScreenState extends State<VolunteerTasksScreen> {
         crossAxisAlignment:
             CrossAxisAlignment.start,
         children: [
-          // ====================================================
-          // TITLE + PRIORITY
-          // ====================================================
-
           Row(
             children: [
               Container(
@@ -959,10 +963,6 @@ class _VolunteerTasksScreenState extends State<VolunteerTasksScreen> {
 
           const SizedBox(height: 16),
 
-          // ====================================================
-          // DESCRIPTION
-          // ====================================================
-
           Text(
             description,
             style: const TextStyle(
@@ -973,10 +973,6 @@ class _VolunteerTasksScreenState extends State<VolunteerTasksScreen> {
           ),
 
           const SizedBox(height: 17),
-
-          // ====================================================
-          // ASSIGNED BY
-          // ====================================================
 
           Container(
             width: double.infinity,
@@ -1068,10 +1064,6 @@ class _VolunteerTasksScreenState extends State<VolunteerTasksScreen> {
 
           const SizedBox(height: 17),
 
-          // ====================================================
-          // DEADLINE + POINTS
-          // ====================================================
-
           Row(
             children: [
               const Icon(
@@ -1112,10 +1104,6 @@ class _VolunteerTasksScreenState extends State<VolunteerTasksScreen> {
           ),
 
           const SizedBox(height: 17),
-
-          // ====================================================
-          // TIME INFORMATION
-          // ====================================================
 
           Container(
             padding:
@@ -1165,10 +1153,6 @@ class _VolunteerTasksScreenState extends State<VolunteerTasksScreen> {
           ),
 
           const SizedBox(height: 17),
-
-          // ====================================================
-          // STATUS + EDIT BUTTON
-          // ====================================================
 
           Row(
             children: [

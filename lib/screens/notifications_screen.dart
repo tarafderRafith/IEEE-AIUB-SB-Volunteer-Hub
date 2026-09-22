@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
-import '../services/database_service.dart';
+import '../services/central_notification_service.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -32,7 +32,7 @@ class _NotificationsScreenState
 
     debugPrint('');
     debugPrint('========================================');
-    debugPrint('🔔 NOTIFICATIONS SCREEN INIT');
+    debugPrint('🔔 CENTRAL NOTIFICATIONS SCREEN INIT');
     debugPrint('========================================');
 
     _loadNotifications();
@@ -65,7 +65,7 @@ class _NotificationsScreenState
   ) {
     if (state == AppLifecycleState.resumed) {
       debugPrint(
-        '🔔 App resumed → refreshing notifications',
+        '🔔 App resumed → refreshing central notifications',
       );
 
       _loadNotifications(
@@ -73,6 +73,10 @@ class _NotificationsScreenState
       );
     }
   }
+
+  // =========================================================
+  // LOAD NOTIFICATIONS FROM CENTRAL API
+  // =========================================================
 
   Future<void> _loadNotifications({
     bool showLoading = true,
@@ -85,7 +89,7 @@ class _NotificationsScreenState
       '🔔 ----------------------------------------',
     );
     debugPrint(
-      '🔔 LOADING NOTIFICATIONS',
+      '🔔 LOADING CENTRAL NOTIFICATIONS',
     );
     debugPrint(
       '🔔 AuthService.memberId: $memberId',
@@ -130,17 +134,16 @@ class _NotificationsScreenState
 
     try {
       debugPrint(
-        '🔎 Requesting notifications for member ID: $memberId',
+        '🔎 Requesting central notifications for: $memberId',
       );
 
       final notifications =
-          await DatabaseService
-              .getNotificationsForMember(
-        memberId,
-      );
+          await CentralNotificationService
+              .getMyNotifications();
 
       debugPrint(
-        '✅ Notifications returned: ${notifications.length}',
+        '✅ Central notifications returned: '
+        '${notifications.length}',
       );
 
       for (final notification
@@ -148,10 +151,10 @@ class _NotificationsScreenState
         debugPrint(
           '🔔 Notification: '
           'id=${notification['id']}, '
-          'recipient=${notification['recipient_member_id']}, '
+          'recipient=${notification['recipientMemberId']}, '
           'title=${notification['title']}, '
           'type=${notification['type']}, '
-          'read=${notification['is_read']}',
+          'read=${notification['isRead']}',
         );
       }
 
@@ -169,11 +172,11 @@ class _NotificationsScreenState
       });
 
       debugPrint(
-        '✅ Notifications state updated successfully.',
+        '✅ Central notification state updated successfully.',
       );
     } catch (e, stackTrace) {
       debugPrint(
-        '❌ Failed to load notifications: $e',
+        '❌ Failed to load central notifications: $e',
       );
 
       debugPrint(
@@ -191,13 +194,17 @@ class _NotificationsScreenState
     }
   }
 
+  // =========================================================
+  // MARK ONE AS READ
+  // =========================================================
+
   Future<void> _markAsRead(
     int notificationId,
   ) async {
     try {
       final success =
-          await DatabaseService
-              .markNotificationAsRead(
+          await CentralNotificationService
+              .markAsRead(
         notificationId,
       );
 
@@ -205,20 +212,24 @@ class _NotificationsScreenState
         '🔔 Mark notification $notificationId as read: $success',
       );
 
+      if (!success) {
+        return;
+      }
+
       if (!mounted) return;
 
       setState(() {
         final index =
             _notifications.indexWhere(
           (notification) =>
-              notification['id'] ==
+              _getId(notification) ==
               notificationId,
         );
 
         if (index != -1) {
           _notifications[index] = {
             ..._notifications[index],
-            'is_read': 1,
+            'isRead': true,
           };
         }
       });
@@ -229,20 +240,24 @@ class _NotificationsScreenState
     }
   }
 
+  // =========================================================
+  // MARK ALL AS READ
+  // =========================================================
+
   Future<void> _markAllAsRead() async {
-    final memberId =
-        AuthService.memberId?.trim();
-
-    if (memberId == null ||
-        memberId.isEmpty) {
-      return;
-    }
-
     try {
-      await DatabaseService
-          .markAllNotificationsAsRead(
-        memberId,
-      );
+      final success =
+          await CentralNotificationService
+              .markAllAsRead();
+
+      if (!success) {
+        _showMessage(
+          'Failed to update notifications.',
+          isError: true,
+        );
+
+        return;
+      }
 
       if (!mounted) return;
 
@@ -252,7 +267,7 @@ class _NotificationsScreenState
           (notification) {
             return {
               ...notification,
-              'is_read': 1,
+              'isRead': true,
             };
           },
         ).toList();
@@ -273,12 +288,16 @@ class _NotificationsScreenState
     }
   }
 
+  // =========================================================
+  // DELETE ONE NOTIFICATION
+  // =========================================================
+
   Future<void> _deleteNotification(
     int notificationId,
   ) async {
     try {
       final success =
-          await DatabaseService
+          await CentralNotificationService
               .deleteNotification(
         notificationId,
       );
@@ -292,7 +311,7 @@ class _NotificationsScreenState
       setState(() {
         _notifications.removeWhere(
           (notification) =>
-              notification['id'] ==
+              _getId(notification) ==
               notificationId,
         );
       });
@@ -312,15 +331,11 @@ class _NotificationsScreenState
     }
   }
 
+  // =========================================================
+  // DELETE ALL NOTIFICATIONS
+  // =========================================================
+
   Future<void> _deleteAllNotifications() async {
-    final memberId =
-        AuthService.memberId?.trim();
-
-    if (memberId == null ||
-        memberId.isEmpty) {
-      return;
-    }
-
     if (_notifications.isEmpty) {
       return;
     }
@@ -395,10 +410,18 @@ class _NotificationsScreenState
     }
 
     try {
-      await DatabaseService
-          .deleteAllNotifications(
-        memberId,
-      );
+      final success =
+          await CentralNotificationService
+              .deleteAllNotifications();
+
+      if (!success) {
+        _showMessage(
+          'Failed to clear notifications.',
+          isError: true,
+        );
+
+        return;
+      }
 
       if (!mounted) return;
 
@@ -421,21 +444,65 @@ class _NotificationsScreenState
     }
   }
 
+  // =========================================================
+  // OPEN NOTIFICATION
+  // =========================================================
+
   void _openNotification(
     Map<String, dynamic> notification,
   ) {
-    final id =
-        notification['id'] as int?;
+    final id = _getId(notification);
 
     if (id != null) {
       _markAsRead(id);
     }
   }
 
+  // =========================================================
+  // HELPERS
+  // =========================================================
+
+  int? _getId(
+    Map<String, dynamic> notification,
+  ) {
+    final value = notification['id'];
+
+    if (value is int) {
+      return value;
+    }
+
+    return int.tryParse(
+      value?.toString() ?? '',
+    );
+  }
+
+  bool _isRead(
+    Map<String, dynamic> notification,
+  ) {
+    final value = notification['isRead'];
+
+    if (value is bool) {
+      return value;
+    }
+
+    if (value is int) {
+      return value == 1;
+    }
+
+    return value?.toString().toLowerCase() ==
+        'true';
+  }
+
+  dynamic _getCreatedAt(
+    Map<String, dynamic> notification,
+  ) {
+    return notification['createdAt'];
+  }
+
   int get _unreadCount {
     return _notifications.where(
       (notification) =>
-          notification['is_read'] != 1,
+          !_isRead(notification),
     ).length;
   }
 
@@ -540,7 +607,7 @@ class _NotificationsScreenState
     final now = DateTime.now();
 
     final difference =
-        now.difference(date);
+        now.difference(date.toLocal());
 
     if (difference.inSeconds < 60) {
       return 'Just now';
@@ -562,27 +629,29 @@ class _NotificationsScreenState
       return '${difference.inDays}d ago';
     }
 
+    final localDate = date.toLocal();
+
     final hour =
-        date.hour == 0
+        localDate.hour == 0
             ? 12
-            : date.hour > 12
-                ? date.hour - 12
-                : date.hour;
+            : localDate.hour > 12
+                ? localDate.hour - 12
+                : localDate.hour;
 
     final minute =
-        date.minute.toString().padLeft(
+        localDate.minute.toString().padLeft(
               2,
               '0',
             );
 
     final period =
-        date.hour >= 12
+        localDate.hour >= 12
             ? 'PM'
             : 'AM';
 
-    return '${date.day}/'
-        '${date.month}/'
-        '${date.year} '
+    return '${localDate.day}/'
+        '${localDate.month}/'
+        '${localDate.year} '
         '$hour:$minute $period';
   }
 
@@ -615,6 +684,10 @@ class _NotificationsScreenState
       showLoading: false,
     );
   }
+
+  // =========================================================
+  // BUILD
+  // =========================================================
 
   @override
   Widget build(
@@ -879,7 +952,7 @@ class _NotificationsScreenState
     Map<String, dynamic> notification,
   ) {
     final id =
-        notification['id'] as int?;
+        _getId(notification);
 
     final title =
         notification['title']
@@ -897,10 +970,10 @@ class _NotificationsScreenState
             'system';
 
     final isRead =
-        notification['is_read'] == 1;
+        _isRead(notification);
 
     final createdAt =
-        notification['created_at'];
+        _getCreatedAt(notification);
 
     final color =
         _getNotificationColor(type);

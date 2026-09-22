@@ -15,14 +15,11 @@ public class ApplicationDbContext : DbContext
 
     public DbSet<VolunteerTask> Tasks => Set<VolunteerTask>();
 
-    protected override void OnModelCreating(
-        ModelBuilder modelBuilder)
+    public DbSet<Notification> Notifications => Set<Notification>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-
-        // =====================================================
-        // USERS
-        // =====================================================
 
         modelBuilder.Entity<User>(entity =>
         {
@@ -69,10 +66,6 @@ public class ApplicationDbContext : DbContext
                 .IsRequired();
         });
 
-        // =====================================================
-        // TASKS
-        // =====================================================
-
         modelBuilder.Entity<VolunteerTask>(entity =>
         {
             entity.HasKey(t => t.Id);
@@ -113,6 +106,42 @@ public class ApplicationDbContext : DbContext
             entity.HasIndex(t => t.Status);
 
             entity.HasIndex(t => t.Priority);
+        });
+
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.HasKey(n => n.Id);
+
+            entity.Property(n => n.RecipientMemberId)
+                .IsRequired()
+                .HasMaxLength(50);
+
+            entity.Property(n => n.Title)
+                .IsRequired()
+                .HasMaxLength(200);
+
+            entity.Property(n => n.Message)
+                .IsRequired();
+
+            entity.Property(n => n.Type)
+                .IsRequired()
+                .HasMaxLength(50);
+
+            entity.Property(n => n.IsRead)
+                .IsRequired();
+
+            entity.Property(n => n.CreatedAt)
+                .IsRequired();
+
+            entity.HasIndex(n => n.RecipientMemberId);
+
+            entity.HasIndex(n => n.IsRead);
+
+            entity.HasIndex(n => n.CreatedAt);
+
+            entity.HasIndex(n => n.RelatedTaskId);
+
+            entity.HasIndex(n => n.RelatedEventId);
         });
     }
 }

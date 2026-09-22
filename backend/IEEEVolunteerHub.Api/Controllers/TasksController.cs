@@ -98,7 +98,10 @@ public class TasksController : ControllerBase
             });
         }
 
-        // Validate priority
+        // =====================================================
+        // VALIDATE PRIORITY
+        // =====================================================
+
         string priority =
             string.IsNullOrWhiteSpace(request.Priority)
                 ? "Medium"
@@ -127,7 +130,10 @@ public class TasksController : ControllerBase
                 priority,
                 StringComparison.OrdinalIgnoreCase));
 
-        // Validate points
+        // =====================================================
+        // VALIDATE POINTS
+        // =====================================================
+
         if (request.Points < 0 || request.Points > 1000)
         {
             return BadRequest(new
@@ -135,6 +141,10 @@ public class TasksController : ControllerBase
                 message = "Points must be between 0 and 1000."
             });
         }
+
+        // =====================================================
+        // CREATE TASK
+        // =====================================================
 
         var task = new VolunteerTask
         {
@@ -169,7 +179,42 @@ public class TasksController : ControllerBase
 
         _db.Tasks.Add(task);
 
+        // Save first so the task receives its database ID.
         await _db.SaveChangesAsync();
+
+        // =====================================================
+        // CREATE CENTRAL NOTIFICATION
+        // =====================================================
+
+        var notification = new Notification
+        {
+            RecipientMemberId = volunteer.MemberId,
+
+            Title = "New Task Assigned",
+
+            Message =
+                $"You have been assigned a new task: {task.Title}",
+
+            Type = "task_assigned",
+
+            IsRead = false,
+
+            CreatedAt = DateTime.UtcNow,
+
+            ReadAt = null,
+
+            RelatedTaskId = task.Id,
+
+            RelatedEventId = null
+        };
+
+        _db.Notifications.Add(notification);
+
+        await _db.SaveChangesAsync();
+
+        // =====================================================
+        // RESPONSE
+        // =====================================================
 
         return Ok(new
         {
@@ -191,6 +236,18 @@ public class TasksController : ControllerBase
                 task.UpdatedAt,
                 task.StartedAt,
                 task.CompletedAt
+            },
+
+            notification = new
+            {
+                notification.Id,
+                notification.RecipientMemberId,
+                notification.Title,
+                notification.Message,
+                notification.Type,
+                notification.IsRead,
+                notification.CreatedAt,
+                notification.RelatedTaskId
             }
         });
     }
@@ -351,7 +408,10 @@ public class TasksController : ControllerBase
 
         task.UpdatedAt = DateTime.UtcNow;
 
-        // When volunteer starts the task
+        // =====================================================
+        // WHEN VOLUNTEER STARTS THE TASK
+        // =====================================================
+
         if (status == "In Process")
         {
             if (task.StartedAt == null)
@@ -362,7 +422,10 @@ public class TasksController : ControllerBase
             task.CompletedAt = null;
         }
 
-        // When volunteer marks the task done
+        // =====================================================
+        // WHEN VOLUNTEER MARKS TASK DONE
+        // =====================================================
+
         else if (status == "Done")
         {
             if (task.StartedAt == null)
@@ -373,7 +436,10 @@ public class TasksController : ControllerBase
             task.CompletedAt = DateTime.UtcNow;
         }
 
-        // When task is returned to pending
+        // =====================================================
+        // WHEN TASK IS RETURNED TO PENDING
+        // =====================================================
+
         else if (status == "Pending")
         {
             task.StartedAt = null;
