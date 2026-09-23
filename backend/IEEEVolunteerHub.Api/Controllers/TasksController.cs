@@ -20,10 +20,7 @@ public class TasksController : ControllerBase
         _db = db;
     }
 
-    // =========================================================
-    // CREATE / ASSIGN TASK
-    // =========================================================
-
+   
     [HttpPost]
     [Authorize(Roles = "Executive")]
     public async Task<IActionResult> CreateTask(
@@ -98,10 +95,7 @@ public class TasksController : ControllerBase
             });
         }
 
-        // =====================================================
-        // VALIDATE PRIORITY
-        // =====================================================
-
+        
         string priority =
             string.IsNullOrWhiteSpace(request.Priority)
                 ? "Medium"
@@ -130,9 +124,6 @@ public class TasksController : ControllerBase
                 priority,
                 StringComparison.OrdinalIgnoreCase));
 
-        // =====================================================
-        // VALIDATE POINTS
-        // =====================================================
 
         if (request.Points < 0 || request.Points > 1000)
         {
@@ -142,10 +133,7 @@ public class TasksController : ControllerBase
             });
         }
 
-        // =====================================================
-        // CREATE TASK
-        // =====================================================
-
+        
         var task = new VolunteerTask
         {
             Title = request.Title.Trim(),
@@ -182,10 +170,7 @@ public class TasksController : ControllerBase
         // Save first so the task receives its database ID.
         await _db.SaveChangesAsync();
 
-        // =====================================================
-        // CREATE CENTRAL NOTIFICATION
-        // =====================================================
-
+      
         var notification = new Notification
         {
             RecipientMemberId = volunteer.MemberId,
@@ -211,10 +196,6 @@ public class TasksController : ControllerBase
         _db.Notifications.Add(notification);
 
         await _db.SaveChangesAsync();
-
-        // =====================================================
-        // RESPONSE
-        // =====================================================
 
         return Ok(new
         {
@@ -251,10 +232,6 @@ public class TasksController : ControllerBase
             }
         });
     }
-
-    // =========================================================
-    // GET MY TASKS
-    // =========================================================
 
     [HttpGet("my-tasks")]
     [Authorize(Roles = "Volunteer")]
@@ -297,10 +274,6 @@ public class TasksController : ControllerBase
 
         return Ok(tasks);
     }
-
-    // =========================================================
-    // GET SINGLE TASK
-    // =========================================================
 
     [HttpGet("{id:int}")]
     public async Task<IActionResult> GetTask(int id)
@@ -358,9 +331,6 @@ public class TasksController : ControllerBase
         });
     }
 
-    // =========================================================
-    // UPDATE TASK STATUS
-    // =========================================================
 
     [HttpPut("{id:int}/status")]
     [Authorize(Roles = "Volunteer")]
@@ -408,9 +378,6 @@ public class TasksController : ControllerBase
 
         task.UpdatedAt = DateTime.UtcNow;
 
-        // =====================================================
-        // WHEN VOLUNTEER STARTS THE TASK
-        // =====================================================
 
         if (status == "In Process")
         {
@@ -422,9 +389,7 @@ public class TasksController : ControllerBase
             task.CompletedAt = null;
         }
 
-        // =====================================================
-        // WHEN VOLUNTEER MARKS TASK DONE
-        // =====================================================
+      
 
         else if (status == "Done")
         {
