@@ -569,7 +569,12 @@ Contributions and suggestions are welcome.
 2. Keep changes focused and test them locally.
 3. Verify both the Flutter app and the backend API where relevant.
 4. Submit a pull request describing the change.
+   
+## 👨‍💻 Author
 
+**Tarafder Md. Rafith**
+
+* GitHub: [@tarafderRafith](https://github.com/tarafderRafith)
 ## License
 
 No license has been specified yet. Add a `LICENSE` file before distributing or reusing this project publicly.
